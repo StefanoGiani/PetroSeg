@@ -1,0 +1,20 @@
+INSTALLATION:
+---------------
+
+Creation of the virtual envirorment:
+--------------------------------------
+
+Creation of the envirorment:
+python3 -m venv ./tkinter_env
+
+Activation of the envirorment:
+source tkinter_env/bin/activate
+
+
+Installation of tkinter (Linux):
+----------------------------------
+
+Installation of the packages:
+sudo apt-get install python3-tk
+
+pip install pillow
