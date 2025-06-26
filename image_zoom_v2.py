@@ -1,5 +1,6 @@
 # Python code to create a window to display an image using tkinter.
 # In this version of the code it is possible to zoom in and out of the image.
+# In this version, the zoom can also be controlled by the keys + and -.
 
 # Author Stefano Giani
 
@@ -27,7 +28,13 @@ class ImageViewer:
 
         self.label = tk.Label(root)
         self.label.pack()
-
+        
+        # Bind + and - keys for zooming
+        self.root.bind("<plus>", lambda event: self.zoom_in())
+        self.root.bind("<minus>", lambda event: self.zoom_out())
+        self.root.bind("<KeyPress-equal>", lambda event: self.zoom_in())  # For '+' without Shift
+        self.root.bind("<KeyPress-minus>", lambda event: self.zoom_out())  # For '-' with Shift
+        
     # Routine to run in response to the button open image been pressed 
     def open_image(self):
         file_path = filedialog.askopenfilename(
