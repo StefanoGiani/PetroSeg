@@ -18,3 +18,7 @@ Installation of the packages:
 sudo apt-get install python3-tk
 
 pip install pillow
+
+pip install numpy
+
+pip install opencv-python

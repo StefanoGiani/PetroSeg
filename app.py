@@ -6,8 +6,7 @@
 # - Clicking anywhere on an image, will display the coordinates of the click at the bottom of the window.
 
 # TODO:
-# - Allow to zoom in and out using the + and - keys on the keypad.
-# - Add a standard file menu.
+# - Substitute the second image with a mask.
 
 # Author Stefano Giani
 
@@ -21,7 +20,6 @@ class ImageViewer:
         self.root = root
         self.root.title("Image Viewer with Zoom")
         self.root.geometry("512x512")
-        self.root.resizable(False, False)
 
 
         self.zoom_level = 1.0
@@ -30,6 +28,30 @@ class ImageViewer:
         self.image1_size = (0, 0)
         self.image2_size = (0, 0)
         self.current_img = 0
+
+
+        # Create the menu bar
+        menu_bar = tk.Menu(root)
+
+
+        # File menu
+        file_menu = tk.Menu(menu_bar, tearoff=0)
+        file_menu.add_command(label="Open Image 1", accelerator="Ctrl+O", command=self.open_image1)
+        file_menu.add_command(label="Open Image 2", command=self.open_image2)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", accelerator="Ctrl+Q", command=self.exit_app)
+        menu_bar.add_cascade(label="File", menu=file_menu)
+
+
+        # Attach the menu bar to the root window
+        root.config(menu=menu_bar)
+
+
+        # Bind keyboard shortcuts
+        root.bind('<Control-o>', lambda event: self.open_image1())
+        root.bind('<Control-q>', lambda event: self.exit_app())
+
+
 
         
         # Controls
@@ -91,8 +113,8 @@ class ImageViewer:
         # Bind + and - keys for zooming
         self.root.bind("<plus>", lambda event: self.zoom_in())
         self.root.bind("<minus>", lambda event: self.zoom_out())
-        self.root.bind("<KeyPress-plus>", lambda event: self.zoom_in())  # For '+' without Shift
-        self.root.bind("<KeyPress-minus>", lambda event: self.zoom_out())  # For '-' with Shift
+        self.root.bind("<KP_Add>", lambda event: self.zoom_in())  # For '+' without Shift
+        self.root.bind("<KP_Subtract>", lambda event: self.zoom_out())  # For '-' with Shift
         # Arrow keys to pan the image
         self.root.bind("<Left>", lambda event: self.canvas.xview_scroll(-1, "units"))
         self.root.bind("<Right>", lambda event: self.canvas.xview_scroll(1, "units"))
@@ -220,6 +242,11 @@ class ImageViewer:
             self.current_img = 2
             self.display_image()
             self.update_status(self.image2_size)
+
+    
+    def exit_app(self):
+        root.quit()
+
 
 
 # Run the app
