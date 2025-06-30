@@ -5,6 +5,8 @@
 # - Crop an image dragging a region with the mouse.
 # - Ask to save the image, if not saved.
 # - Undo and redo.
+# - Added mechanism for tools.
+# - Added message label in the bottom status bar.
 
 # Shortcuts:
 # Ctrl+O Load image.
@@ -13,8 +15,11 @@
 # Arrow keys Pan the image.
 # Ctrl+Z Undo.
 # Ctrl+Y Redo.
+# Esc Deselect current tool
 
 # TODO:
+# - New, Open, Save projects.
+# - Masking background.
 
 # Author Stefano Giani
 
@@ -22,8 +27,13 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 
-STATUS_NONE = 0
-STATUS_IMAGE_LOADED = 1
+# Stati of the app:
+STATUS_NONE = 0 # Just started 
+STATUS_IMAGE_LOADED = 1 # An image is loaded
+
+# Stati of the tools
+STATUS_TOOL_NONE = 0 # No tool selected.
+STATUS_TOOL_CROP = 1 # Crop selected
 
 # Class to contain the data for the projecy
 class ProjectData:
@@ -150,6 +160,9 @@ class ImageViewer:
         # Init initial status app
         self.status = STATUS_NONE
 
+        # Init initial status tools
+        self.status_tool = STATUS_TOOL_NONE
+
         # Fields for cropping the image
         self.start_x = None
         self.start_y = None
@@ -173,6 +186,11 @@ class ImageViewer:
         self.edit_menu.add_command(label="Zoom in", accelerator="+", command=self.zoom_in)
         self.edit_menu.add_command(label="Zoom out", accelerator="-", command=self.zoom_out)
         self.menu_bar.add_cascade(label="Edit", menu=self.edit_menu)
+        # Image Menu
+        self.crop_flag = tk.BooleanVar(value=False)
+        self.image_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.image_menu.add_checkbutton(label="Crop", command=self.crop_tool, variable=self.crop_flag)
+        self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
         # Attach the menu bar to the root window
         root.config(menu=self.menu_bar)
 
@@ -182,10 +200,15 @@ class ImageViewer:
         self.edit_menu.entryconfig("Zoom out", state="disabled")
         self.edit_menu.entryconfig("Undo", state="disabled")
         self.edit_menu.entryconfig("Redo", state="disabled")
+        self.image_menu.entryconfig("Crop", state="disabled")
         
         # Status bar at the bottom of the window
-        self.status_label = tk.Label(root, text="Image size: N/A", bd=1, relief=tk.SUNKEN, anchor=tk.W)
-        self.status_label.pack(fill=tk.X, side=tk.BOTTOM, ipady=2)
+        self.status_frame = tk.Frame(root, bd=1, relief=tk.SUNKEN)
+        self.status_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        self.status_label_size = tk.Label(self.status_frame, text="N/A", anchor=tk.W, width=20)
+        self.status_label_size.pack(side=tk.LEFT)
+        self.status_label_message = tk.Label(self.status_frame, text="", anchor=tk.W)
+        self.status_label_message.pack(fill=tk.X, side=tk.LEFT, expand=True)
         
         # Zoom controls
         zoom_frame = tk.Frame(root)
@@ -240,6 +263,8 @@ class ImageViewer:
         # Menu edit
         root.bind('<Control-z>', lambda event: self.undo())
         root.bind('<Control-y>', lambda event: self.redo())
+        # Tools
+        root.bind('<Escape>', lambda event: self.deselect_tool())
 
         # Init events
         # Events for cropping the image
@@ -323,7 +348,7 @@ class ImageViewer:
         size : tuple
             Integer values describing the dimensions of the image.
         """
-        self.status_label.config(text=f"Image size: {size[0]} x {size[1]} pixels")
+        self.status_label_size.config(text=f"{size[0]} x {size[1]} pixels")
             
     def display_image(self):
         """Routine to display the image with the correct level of zooming.
@@ -347,11 +372,12 @@ class ImageViewer:
             Event captured.
         """
         if self.status == STATUS_IMAGE_LOADED:
-            self.start_x = self.canvas.canvasx(event.x)
-            self.start_y = self.canvas.canvasy(event.y)
-            if self.rect_id:
-                self.canvas.delete(self.rect_id)
-            self.rect_id = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline="red")
+            if self.status_tool == STATUS_TOOL_CROP:
+                self.start_x = self.canvas.canvasx(event.x)
+                self.start_y = self.canvas.canvasy(event.y)
+                if self.rect_id:
+                    self.canvas.delete(self.rect_id)
+                self.rect_id = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline="red")
 
     def on_mouse_drag(self, event):
         """Routine to resize the region to be used for cropping the image.
@@ -362,9 +388,10 @@ class ImageViewer:
             Event captured.
         """
         if self.status == STATUS_IMAGE_LOADED:
-            cur_x = self.canvas.canvasx(event.x)
-            cur_y = self.canvas.canvasy(event.y)
-            self.canvas.coords(self.rect_id, self.start_x, self.start_y, cur_x, cur_y)
+            if self.status_tool == STATUS_TOOL_CROP:
+                cur_x = self.canvas.canvasx(event.x)
+                cur_y = self.canvas.canvasy(event.y)
+                self.canvas.coords(self.rect_id, self.start_x, self.start_y, cur_x, cur_y)
 
     def on_mouse_release(self, event):
         """Routine to crop the image.
@@ -375,20 +402,22 @@ class ImageViewer:
             Event captured.
         """
         if self.status == STATUS_IMAGE_LOADED:
-            end_x = self.canvas.canvasx(event.x)
-            end_y = self.canvas.canvasy(event.y)
+            if self.status_tool == STATUS_TOOL_CROP:
+                end_x = self.canvas.canvasx(event.x)
+                end_y = self.canvas.canvasy(event.y)
 
-            x1 = int(min(self.start_x, end_x) / self.zoom_level)
-            y1 = int(min(self.start_y, end_y) / self.zoom_level)
-            x2 = int(max(self.start_x, end_x) / self.zoom_level)
-            y2 = int(max(self.start_y, end_y) / self.zoom_level)
+                x1 = int(min(self.start_x, end_x) / self.zoom_level)
+                y1 = int(min(self.start_y, end_y) / self.zoom_level)
+                x2 = int(max(self.start_x, end_x) / self.zoom_level)
+                y2 = int(max(self.start_y, end_y) / self.zoom_level)
 
-            self.project.crop_image(x1, y1, x2, y2)
-            self.zoom_level = 1.0
-            self.display_image()
-            self.update_image_size_status(self.project.size)
-            self.file_menu.entryconfig("Save Image", state="normal")
-            self.update_undo_redo()
+                self.project.crop_image(x1, y1, x2, y2)
+                self.zoom_level = 1.0
+                self.display_image()
+                self.update_image_size_status(self.project.size)
+                self.file_menu.entryconfig("Save Image", state="normal")
+                self.update_undo_redo()
+                self.change_status_tool(STATUS_TOOL_NONE)
 
     def update_undo_redo(self):
         """Routine to update the status of the entries Undo and Redo in the Edit menu.
@@ -415,6 +444,7 @@ class ImageViewer:
             else: 
                 self.file_menu.entryconfig("Save Image", state="normal")
             self.update_undo_redo()
+            self.change_status_tool(STATUS_TOOL_NONE)
 
     def redo(self):
         """Redo the next action.
@@ -428,6 +458,7 @@ class ImageViewer:
             else: 
                 self.file_menu.entryconfig("Save Image", state="normal")
             self.update_undo_redo()
+            self.change_status_tool(STATUS_TOOL_NONE)
 
     def save_image(self):
         """Routine to save the current image."""
@@ -438,9 +469,16 @@ class ImageViewer:
                 self.project.rgb.save(file_path)
                 self.project.saved = True
                 self.file_menu.entryconfig("Save Image", state="disabled")
+                self.change_status_tool(STATUS_TOOL_NONE)
 
     def change_status(self, new_status):
-        """Routine to transition between stati for the app."""
+        """Routine to transition between stati for the app.
+
+        Parameters
+        ----------
+        new_status : integer
+            New status
+        """
         if new_status == STATUS_IMAGE_LOADED:
             if self.status == STATUS_NONE:
                 self.edit_menu.entryconfig("Zoom in", state="normal")
@@ -450,6 +488,7 @@ class ImageViewer:
                 self.zoom_out_button.config(state="normal")
                 self.zoom_set_button.config(state="normal")
                 self.zoom_reset_button.config(state="normal")
+                self.image_menu.entryconfig("Crop", state="normal")
                 self.status = STATUS_IMAGE_LOADED
             else:
                 messagebox.showerror("Error", "No transition for the status")
@@ -474,6 +513,43 @@ class ImageViewer:
         else:
             self.root.destroy()
 
+    def deselect_tool(self):
+        """Routine to deselect the current selected tool."""
+        self.change_status_tool(STATUS_TOOL_NONE)
+
+    def crop_tool(self):
+        """Routine to select the crop tool."""
+        self.change_status_tool(STATUS_TOOL_CROP)
+
+    def change_status_tool(self, new_status):
+        """Routine to transition between stati for the app for tools.
+
+        Parameters
+        ----------
+        new_status : integer
+            New status
+        """
+        if new_status == STATUS_TOOL_NONE:
+            if self.status_tool == STATUS_TOOL_CROP:
+                self.start_x = None
+                self.start_y = None
+                self.rect_id = None
+                self.crop_flag.set(False)
+                self.canvas.config(cursor="arrow")
+                self.status_label_message.config(text="")
+                self.status_tool = STATUS_TOOL_NONE
+            else:
+                messagebox.showerror("Error", "No transition for the status for tools")
+        elif new_status == STATUS_TOOL_CROP:
+            if self.status_tool == STATUS_TOOL_NONE:
+                self.crop_flag.set(True)
+                self.canvas.config(cursor="cross")
+                self.status_label_message.config(text="Drag a region to crop the image. Esc to cancel.")
+                self.status_tool = STATUS_TOOL_CROP
+            else:
+                messagebox.showerror("Error", "No transition for the status for tools")
+        else:
+            messagebox.showerror("Error", "Unknown status for tools")
 
 
 # Run the app
