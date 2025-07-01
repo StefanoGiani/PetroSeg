@@ -3,13 +3,14 @@
 # Features:
 # - The image can be zoomed in and out.
 # - Crop an image dragging a region with the mouse.
-# - Ask to save the image, if not saved.
 # - Undo and redo.
 # - Added mechanism for tools.
 # - Added message label in the bottom status bar.
 
 # Shortcuts:
-# Ctrl+O Load image.
+# Ctrl+N New project and open an image.
+# Ctrl+S Save project.
+# Ctrl+O Load project.
 # Ctrl+Q Terminate the app.
 # +, - Zoom level.
 # Arrow keys Pan the image.
@@ -18,7 +19,6 @@
 # Esc Deselect current tool
 
 # TODO:
-# - New, Open, Save projects.
 # - Masking background.
 
 # Author Stefano Giani
@@ -26,6 +26,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
+import pickle
 
 # Stati of the app:
 STATUS_NONE = 0 # Just started 
@@ -37,22 +38,87 @@ STATUS_TOOL_CROP = 1 # Crop selected
 
 # Class to contain the data for the projecy
 class ProjectData:
-    def __init__(self, file_path, flag_saved):
-        """Constructor from a file on disk.
+    def __init__(self, project_path = None, image_path = None ):
+        """Constructor.
+        It can be called with no parameters to create an empty project, 
+        or it can be called passing either a path of an image file or a
+        path of a project file.
 
         Parameters
         ----------
-        file_path : string
+        project_path : string
+            Path to the file containing the project to open.
+        image_path : string
             Path to the file containing the image to open.
-        flag_saved : logical
-            Indicates if the data are already saved or not.
         """
-        self.rgb = Image.open(file_path)
-        self.size = self.rgb.size
-        self.saved = flag_saved
-        self.stack_actions = []
-        self.stack_actions.append({"action": "LoadImage(" + file_path + ")", "saved": self.saved, "size": self.size, "rgb": self.rgb.copy()})
-        self.cursor_stack_action = 0
+        if image_path is not None:
+        
+            self.rgb = Image.open(image_path)
+            self.size = self.rgb.size
+            self.saved = False
+            self.stack_actions = []
+            self.stack_actions.append({"action": "LoadImage(" + image_path + ")", "saved": self.saved, "size": self.size, "rgb": self.rgb.copy()})
+            self.cursor_stack_action = 0
+            self.project_file = None
+        elif project_path is not None:
+            self.load(project_path)
+        else:
+            self.rgb = None
+            self.size = None
+            self.saved = True
+            self.stack_actions = []
+            self.cursor_stack_action = 0
+            self.project_file = None
+
+    def save(self, project_path):
+        """Routine to save the project to file.
+
+        Parameters
+        ----------
+        project_path : string
+           Path where to save the project.
+        """
+
+        with open(project_path, "wb") as f:
+            state= {}
+            state['rgb'] = self.rgb
+            state['size'] = self.size
+            state['stack_actions'] = self.stack_actions
+            state['cursor_stack_action'] = self.cursor_stack_action
+            state['project_file'] = project_path
+            self.project_file = project_path
+            pickle.dump(state, f)
+        self.saved = True
+
+    def load(self, project_path):
+        """Routine to load a project from disk.
+
+        Parameters
+        ----------
+        project_path : string
+            _description_
+        """
+
+        with open(project_path, "rb") as f:
+            state = pickle.load(f)
+            self.rgb = state['rgb'] 
+            self.size = state['size'] 
+            self.stack_actions = state['stack_actions']
+            self.cursor_stack_action = state['cursor_stack_action']
+            self.project_file = state['project_file']
+        self.saved = True
+
+
+
+        with open(project_path, "wb") as f:
+            state= {}
+            state['rgb'] = self.rgb
+            state['size'] = self.size
+            state['stack_actions'] = self.stack_actions
+            state['cursor_stack_action'] = self.cursor_stack_action
+            pickle.dump(state, f)
+        self.saved = True
+
 
     def truncate_stack(self):
         """Truncate the stack of actions.
@@ -155,7 +221,7 @@ class ImageViewer:
         self.root.geometry("512x512")
 
         self.zoom_level = 1.0 # Level of Zoom
-        self.project = None
+        self.project = ProjectData()
 
         # Init initial status app
         self.status = STATUS_NONE
@@ -173,8 +239,10 @@ class ImageViewer:
         self.menu_bar = tk.Menu(root)
         # File menu
         self.file_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.file_menu.add_command(label="Open Image", accelerator="Ctrl+O", command=self.open_image)
-        self.file_menu.add_command(label="Save Image", accelerator="Ctrl+S", command=self.save_image)
+        self.file_menu.add_command(label="New Project...", accelerator="Ctrl+N", command=self.new_project)
+        self.file_menu.add_command(label="Load Project...", accelerator="Ctrl+O", command=self.load_project)
+        self.file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
+        self.file_menu.add_command(label="Save Project As...", command=self.save_as_project)
         self.file_menu.add_separator()
         self.file_menu.add_command(label="Exit", accelerator="Ctrl+Q", command=self.on_closing)
         self.menu_bar.add_cascade(label="File", menu=self.file_menu)
@@ -189,13 +257,16 @@ class ImageViewer:
         # Image Menu
         self.crop_flag = tk.BooleanVar(value=False)
         self.image_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.image_menu.add_command(label="Export Image...", command=self.export_image)
+        self.image_menu.add_separator()
         self.image_menu.add_checkbutton(label="Crop", command=self.crop_tool, variable=self.crop_flag)
         self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
         # Attach the menu bar to the root window
         root.config(menu=self.menu_bar)
 
         # Init entries in menus
-        self.file_menu.entryconfig("Save Image", state="disabled")
+        self.file_menu.entryconfig("Save Project", state="disabled")
+        self.image_menu.entryconfig("Export Image...", state="disabled")
         self.edit_menu.entryconfig("Zoom in", state="disabled")
         self.edit_menu.entryconfig("Zoom out", state="disabled")
         self.edit_menu.entryconfig("Undo", state="disabled")
@@ -258,7 +329,8 @@ class ImageViewer:
         self.root.bind("<Up>", lambda event: self.canvas.yview_scroll(-1, "units"))
         self.root.bind("<Down>", lambda event: self.canvas.yview_scroll(1, "units"))
         # Menu file
-        root.bind('<Control-o>', lambda event: self.open_image())
+        root.bind('<Control-n>', lambda event: self.new_project())
+        root.bind('<Control-o>', lambda event: self.load_project())
         root.bind('<Control-q>', lambda event: self.on_closing())
         # Menu edit
         root.bind('<Control-z>', lambda event: self.undo())
@@ -328,17 +400,33 @@ class ImageViewer:
             self.zoom_entry.insert(0, str(zoom_percent))
 
         
-    def open_image(self):
-        """Routine to open an image."""
+    def new_project(self):
+        """Routine to create a new project."""
+
+        # If the current project is not saved, ask the user if they want to save it.
+        if not self.project.saved:
+            result = messagebox.askyesnocancel("New Project", "Do you want to save the project before creating a new one?")
+            if result is True:
+                self.save_project()
+                if self.project.saved:
+                    self.project = ProjectData()
+                else:
+                    return
+            elif result is False:
+                self.project = ProjectData()
+        
+        
         file_path = filedialog.askopenfilename(
             filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp *.gif")]
         )
         if file_path:
-            self.project = ProjectData(file_path, True)
+            self.project = ProjectData(image_path = file_path)
+            self.change_status(STATUS_IMAGE_LOADED)
             self.zoom_level = 1.0
             self.display_image()
             self.update_image_size_status(self.project.size)
-            self.change_status(STATUS_IMAGE_LOADED)
+            self.change_status_tool(STATUS_TOOL_NONE)
+            
     
     def update_image_size_status(self, size):
         """Update dimensions of the image in the status bar.
@@ -348,19 +436,21 @@ class ImageViewer:
         size : tuple
             Integer values describing the dimensions of the image.
         """
-        self.status_label_size.config(text=f"{size[0]} x {size[1]} pixels")
+        if self.status == STATUS_IMAGE_LOADED:
+            self.status_label_size.config(text=f"{size[0]} x {size[1]} pixels")
             
     def display_image(self):
         """Routine to display the image with the correct level of zooming.
         """
-        width, height = self.project.size
-        new_size = (int(width * self.zoom_level), int(height * self.zoom_level))
-        resized = self.project.rgb.resize(new_size, Image.LANCZOS) # Resize the image using antialising
-        self.tk_image = ImageTk.PhotoImage(resized) # Converts the image into a format Tkinter can use
-        
-        self.canvas.delete("all") # Clear previous image
-        self.image_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
-        self.canvas.config(scrollregion=self.canvas.bbox(self.image_id))
+        if self.status == STATUS_IMAGE_LOADED:
+            width, height = self.project.size
+            new_size = (int(width * self.zoom_level), int(height * self.zoom_level))
+            resized = self.project.rgb.resize(new_size, Image.LANCZOS) # Resize the image using antialising
+            self.tk_image = ImageTk.PhotoImage(resized) # Converts the image into a format Tkinter can use
+            
+            self.canvas.delete("all") # Clear previous image
+            self.image_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
+            self.canvas.config(scrollregion=self.canvas.bbox(self.image_id))
         
 
     def on_mouse_press(self, event):
@@ -415,7 +505,7 @@ class ImageViewer:
                 self.zoom_level = 1.0
                 self.display_image()
                 self.update_image_size_status(self.project.size)
-                self.file_menu.entryconfig("Save Image", state="normal")
+                self.file_menu.entryconfig("Save Project", state="normal")
                 self.update_undo_redo()
                 self.change_status_tool(STATUS_TOOL_NONE)
 
@@ -440,9 +530,9 @@ class ImageViewer:
             self.display_image()
             self.update_image_size_status(self.project.size)
             if self.project.saved:
-                self.file_menu.entryconfig("Save Image", state="disable")
+                self.file_menu.entryconfig("Save Project", state="disable")
             else: 
-                self.file_menu.entryconfig("Save Image", state="normal")
+                self.file_menu.entryconfig("Save Project", state="normal")
             self.update_undo_redo()
             self.change_status_tool(STATUS_TOOL_NONE)
 
@@ -454,21 +544,19 @@ class ImageViewer:
             self.display_image()
             self.update_image_size_status(self.project.size)
             if self.project.saved:
-                self.file_menu.entryconfig("Save Image", state="disable")
+                self.file_menu.entryconfig("Save Project", state="disable")
             else: 
-                self.file_menu.entryconfig("Save Image", state="normal")
+                self.file_menu.entryconfig("Save Project", state="normal")
             self.update_undo_redo()
             self.change_status_tool(STATUS_TOOL_NONE)
 
-    def save_image(self):
+    def export_image(self):
         """Routine to save the current image."""
         if self.status == STATUS_IMAGE_LOADED:
             file_path = filedialog.asksaveasfilename(defaultextension=".png",
                                                    filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg"), ("All files", "*.*")])
             if file_path:
                 self.project.rgb.save(file_path)
-                self.project.saved = True
-                self.file_menu.entryconfig("Save Image", state="disabled")
                 self.change_status_tool(STATUS_TOOL_NONE)
 
     def change_status(self, new_status):
@@ -489,6 +577,7 @@ class ImageViewer:
                 self.zoom_set_button.config(state="normal")
                 self.zoom_reset_button.config(state="normal")
                 self.image_menu.entryconfig("Crop", state="normal")
+                self.image_menu.entryconfig("Export Image...", state="normal")
                 self.status = STATUS_IMAGE_LOADED
             else:
                 messagebox.showerror("Error", "No transition for the status")
@@ -499,17 +588,15 @@ class ImageViewer:
 
     def on_closing(self):
         """Event to intercept the closing message and make sure everything is saved."""
-        if self.status == STATUS_IMAGE_LOADED:
-            if not self.project.saved:
-                result = messagebox.askyesnocancel("Exit", "Do you want to save the image before exiting?")
-                if result is True:
-                    self.save_image()
-                    if self.project.saved:
-                        self.root.destroy()
-                elif result is False:
+        if not self.project.saved:
+            result = messagebox.askyesnocancel("Exit", "Do you want to save the project before exiting?")
+            if result is True:
+                self.save_project()
+                if self.project.saved:
                     self.root.destroy()
-            else:
+            elif result is False:
                 self.root.destroy()
+            self.change_status_tool(STATUS_TOOL_NONE)
         else:
             self.root.destroy()
 
@@ -529,6 +616,10 @@ class ImageViewer:
         new_status : integer
             New status
         """
+        # If the current and new stati are the same, return becasue no action to do.
+        if new_status == self.status_tool:
+            return
+
         if new_status == STATUS_TOOL_NONE:
             if self.status_tool == STATUS_TOOL_CROP:
                 self.start_x = None
@@ -550,6 +641,59 @@ class ImageViewer:
                 messagebox.showerror("Error", "No transition for the status for tools")
         else:
             messagebox.showerror("Error", "Unknown status for tools")
+
+    def save_project(self):
+        """Routine to save the project."""
+        # If the project has never been saved before, ask for the file name.
+        if self.project.project_file is None:
+            file_path = filedialog.asksaveasfilename(defaultextension=".prj",
+                                                filetypes=[("Project files", "*.prj"), ("All files", "*.*")])
+            if file_path:
+                self.project.saved = True
+                self.project.save(file_path)
+                self.file_menu.entryconfig("Save Project", state="disabled")
+                self.change_status_tool(STATUS_TOOL_NONE)
+        else:
+            self.project.saved = True
+            self.project.save(self.project.project_file)
+            self.file_menu.entryconfig("Save Project", state="disabled")
+            self.change_status_tool(STATUS_TOOL_NONE)
+        self.file_menu.entryconfig("Save Project", state="disabled")
+
+    def save_as_project(self):
+        """Routine to save as the project."""
+        file_path = filedialog.asksaveasfilename(defaultextension=".prj",
+                                            filetypes=[("Project files", "*.prj"), ("All files", "*.*")])
+        if file_path:
+            self.project.saved = True
+            self.project.save(file_path)
+            self.file_menu.entryconfig("Save Project", state="disabled")
+            self.change_status_tool(STATUS_TOOL_NONE)
+        self.file_menu.entryconfig("Save Project", state="disabled")
+
+    def load_project(self):
+        """Routine to load a project."""
+        # If the current project has been modified, ask the user if they want to save it before opening another project.
+        if not self.project.saved:
+            result = messagebox.askyesnocancel("Load Project", "Do you want to save the project before loading a new one?")
+            if result is True:
+                self.save_project()
+                if self.project.saved:
+                    self.root.destroy()
+            
+        file_path = filedialog.askopenfilename(
+            filetypes=[("Project File", "*.prj")]
+        )
+        if file_path:
+            self.project = ProjectData(project_path = file_path)
+            if self.project.rgb is not None:
+                self.change_status(STATUS_IMAGE_LOADED)
+                self.zoom_level = 1.0
+                self.display_image()
+                self.update_image_size_status(self.project.size)
+
+        self.file_menu.entryconfig("Save Project", state="disabled")
+
 
 
 # Run the app
