@@ -10,6 +10,8 @@ Bottom status bar to have information about the size of the image and instructon
 
 Top panel to access the controls to change the magnification of the image.
 
+Side panel reporting color values (RGB and HSV) and coordinates of the cursor.
+
 Menus:
 -------
 
@@ -30,6 +32,7 @@ Edit - Commands to edit the image.
 Image - Commands related to images.
 	Export Image... - Save the current image to disk.
 	Crop - Crop the current image.
+	Pick Color - Pick a color to add a region to the mask.
 
 Concepts:
 ----------
@@ -47,6 +50,8 @@ Tools:
 -------
 
 Crop: Crop an image removing unwanted areas. To crop an image choose from the menu Image > Crop, then with the mouse select a rectangular portion of the image to keep. If you want to abort the application of the crop tool, just press Esc. 
+
+Pick Color: Click on the image to add to the mask all pixels of that color and of similar color.
 
 Keyboard Shortcutes:
 ----------------------
