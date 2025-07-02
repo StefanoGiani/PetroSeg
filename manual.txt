@@ -1,0 +1,63 @@
+
+Graphical Elememts:
+---------------------
+
+Dropdown menus to selects commands.
+
+Window area to manipulate images.
+
+Bottom status bar to have information about the size of the image and instructons to use the tools.
+
+Top panel to access the controls to change the magnification of the image.
+
+Menus:
+-------
+
+Next to some commands there are combination of keys, those are shortcuts.
+
+File - Commands to save and restore projects.
+	New Project... - Create a new project.
+	Load Project... - Load a project from disk.
+	Save Project - Save the current project.
+	Save Project As... - Save the current project with a different name.
+
+Edit - Commands to edit the image.
+	Undo - Undo previous action.
+	Redo - Redo previous action.
+	Zoom in - Increase the zoom level.
+	Zoom out - Decrease the zoom level.
+
+Image - Commands related to images.
+	Export Image... - Save the current image to disk.
+	Crop - Crop the current image.
+
+Concepts:
+----------
+
+Project: A project is a datastructure containing all data regarding the segmentaion process. A project can be saved and loaded to disk at any time.
+
+Workflow to Label inclusions:
+------------------------------
+
+Load image: Load the image of the thin section to process.
+
+Crop image: If the image contains unwanted areas, crop it to the part to process.
+
+Tools:
+-------
+
+Crop: Crop an image removing unwanted areas. To crop an image choose from the menu Image > Crop, then with the mouse select a rectangular portion of the image to keep. If you want to abort the application of the crop tool, just press Esc. 
+
+Keyboard Shortcutes:
+----------------------
+
+Ctrl+N New project and open an image.
+Ctrl+S Save project.
+Ctrl+O Load project.
+Ctrl+Q Terminate the app.
++, - Zoom level.
+Arrow keys Pan the image.
+Ctrl+Z Undo.
+Ctrl+Y Redo.
+Esc Deselect current tool.
+Right Mouse Buttom Deselect current tool.

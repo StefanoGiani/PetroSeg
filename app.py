@@ -16,7 +16,8 @@
 # Arrow keys Pan the image.
 # Ctrl+Z Undo.
 # Ctrl+Y Redo.
-# Esc Deselect current tool
+# Esc Deselect current tool.
+# Right Mouse Buttom Deselect current tool.
 
 # TODO:
 # - Masking background.
@@ -27,6 +28,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 import pickle
+import cv2
+import numpy as np
 
 # Stati of the app:
 STATUS_NONE = 0 # Just started 
@@ -53,17 +56,20 @@ class ProjectData:
         """
         if image_path is not None:
         
-            self.rgb = Image.open(image_path)
+            self.rgb = Image.open(image_path).convert('RGB')
+            img_tmp = np.array(self.rgb)
+            self.hsv = cv2.cvtColor(img_tmp, cv2.COLOR_RGB2HSV)
             self.size = self.rgb.size
             self.saved = False
             self.stack_actions = []
-            self.stack_actions.append({"action": "LoadImage(" + image_path + ")", "saved": self.saved, "size": self.size, "rgb": self.rgb.copy()})
+            self.stack_actions.append({"action": "LoadImage(" + image_path + ")", "saved": self.saved, "size": self.size, "rgb": self.rgb.copy(), "hsv": self.hsv.copy()})
             self.cursor_stack_action = 0
             self.project_file = None
         elif project_path is not None:
             self.load(project_path)
         else:
             self.rgb = None
+            self.hsv = None
             self.size = None
             self.saved = True
             self.stack_actions = []
@@ -82,6 +88,7 @@ class ProjectData:
         with open(project_path, "wb") as f:
             state= {}
             state['rgb'] = self.rgb
+            state['hsv'] = self.hsv
             state['size'] = self.size
             state['stack_actions'] = self.stack_actions
             state['cursor_stack_action'] = self.cursor_stack_action
@@ -102,6 +109,7 @@ class ProjectData:
         with open(project_path, "rb") as f:
             state = pickle.load(f)
             self.rgb = state['rgb'] 
+            self.hsv = state['hsv'] 
             self.size = state['size'] 
             self.stack_actions = state['stack_actions']
             self.cursor_stack_action = state['cursor_stack_action']
@@ -110,14 +118,6 @@ class ProjectData:
 
 
 
-        with open(project_path, "wb") as f:
-            state= {}
-            state['rgb'] = self.rgb
-            state['size'] = self.size
-            state['stack_actions'] = self.stack_actions
-            state['cursor_stack_action'] = self.cursor_stack_action
-            pickle.dump(state, f)
-        self.saved = True
 
 
     def truncate_stack(self):
@@ -145,9 +145,12 @@ class ProjectData:
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
         self.rgb = self.rgb.crop((x1, y1, x2, y2))
+        img_tmp = np.array(self.rgb)
+        self.hsv = cv2.cvtColor(img_tmp, cv2.COLOR_RGB2HSV)
         self.size = self.rgb.size
         self.saved = False
-        self.stack_actions.append({"action": "CropImage(" + str(x1) + "," + str(y1) + "," +  str(x2) + "," +  str(y2) + ")", "saved": self.saved, "size": self.size, "rgb": self.rgb.copy()})
+        self.stack_actions.append({"action": "CropImage(" + str(x1) + "," + str(y1) + "," +  str(x2) + "," +  str(y2) + ")", "saved": self.saved, 
+                                   "size": self.size, "rgb": self.rgb.copy(), "hsv": self.hsv.copy()})
 
     def undo(self):
         """Undo the last action.
@@ -163,6 +166,8 @@ class ProjectData:
                 self.size = self.stack_actions[self.cursor_stack_action]["size"]
             if "rgb" in self.stack_actions[self.cursor_stack_action].keys():
                 self.rgb = self.stack_actions[self.cursor_stack_action]["rgb"]
+            if "hsv" in self.stack_actions[self.cursor_stack_action].keys():
+                self.hsv = self.stack_actions[self.cursor_stack_action]["hsv"]
             
         
     def redo(self):
@@ -176,6 +181,8 @@ class ProjectData:
                 self.size = self.stack_actions[self.cursor_stack_action]["size"]
             if "rgb" in self.stack_actions[self.cursor_stack_action].keys():
                 self.rgb = self.stack_actions[self.cursor_stack_action]["rgb"]
+            if "hsv" in self.stack_actions[self.cursor_stack_action].keys():
+                self.hsv = self.stack_actions[self.cursor_stack_action]["hsv"]
 
     def is_undo(self):
         """Routine to check if there are actions in the stack that can be undo.
@@ -345,6 +352,8 @@ class ImageViewer:
         self.canvas.bind("<ButtonRelease-1>", self.on_mouse_release)
         # Intercept message to close app
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        # Cancel tool
+        self.canvas.bind("<Button-3>", self.deselect_tool)
        
         self.image_id = None
 
