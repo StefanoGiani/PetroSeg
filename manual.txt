@@ -33,6 +33,12 @@ Image - Commands related to images.
 	Export Image... - Save the current image to disk.
 	Crop - Crop the current image.
 	Pick Color - Pick a color to add a region to the mask.
+	Unpick Color - Unpick a color to remove a region from the mask.
+
+Mask - Commands to select what to mark on the Mask
+	Background - Set to select the background region.
+	Matrix - Set to select the matrix region.
+	Inclusion - Set to select the inclusion region.
 
 Concepts:
 ----------
@@ -46,12 +52,16 @@ Load image: Load the image of the thin section to process.
 
 Crop image: If the image contains unwanted areas, crop it to the part to process.
 
+Mask the background: Using the mask, select the ara in the image containing the background.
+
 Tools:
 -------
 
 Crop: Crop an image removing unwanted areas. To crop an image choose from the menu Image > Crop, then with the mouse select a rectangular portion of the image to keep. If you want to abort the application of the crop tool, just press Esc. 
 
 Pick Color: Click on the image to add to the mask all pixels of that color and of similar color.
+
+Unpick Color: Click on the image to remove from the mask all pixels of that color and of similar color.
 
 Keyboard Shortcutes:
 ----------------------
@@ -66,3 +76,4 @@ Ctrl+Z Undo.
 Ctrl+Y Redo.
 Esc Deselect current tool.
 Right Mouse Buttom Deselect current tool.
+1, 2, 3 Switch from image, to mask and to blend of image and mask.

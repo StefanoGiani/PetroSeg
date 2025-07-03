@@ -8,6 +8,7 @@
 # - Added message label in the bottom status bar.
 # - Addition of a mask to mark regions. The mask is RGB to allow for more colors and clearer results.
 # - Side panel to report color values and coordinates of the cursor.
+# - Tools to pick and unpick colors to add and remove regions in the mask.
 
 # Shortcuts:
 # Ctrl+N New project and open an image.
@@ -20,6 +21,7 @@
 # Ctrl+Y Redo.
 # Esc Deselect current tool.
 # Right Mouse Buttom Deselect current tool.
+# 1, 2, 3 Switch from image, to mask and to blend of image and mask.
 
 # TODO:
 # - Masking background.
@@ -27,7 +29,7 @@
 # Author Stefano Giani
 
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import pickle
 import cv2
@@ -48,6 +50,12 @@ STATUS_DISPLAY_NONE = 0
 STATUS_DISPLAY_IMAGE = 1
 STATUS_DISPLAY_MASK = 2
 STATUS_DISPLAY_MIX = 3
+
+# List of colors for the mask to mark differnet regions
+COLOR_MASK_NONE = (0,0,0)
+COLOR_MASK_BACKGROUND = (255,255,255)
+COLOR_MASK_MATRIX = (255,0,0)
+COLOR_MASK_INCLUSION = (0,255,0)
 
 # Class to contain the data for the projecy
 class ProjectData:
@@ -133,7 +141,7 @@ class ProjectData:
         self.saved = True
 
 
-    def select_color_hsv(self, lower, upper):
+    def select_color_hsv(self, lower, upper, color):
         """Select a region in the mask based on range in HSV colors.
         
         Parameters
@@ -141,35 +149,16 @@ class ProjectData:
         lower : tuple
             Three uint8 values to determine the lower value for the range in HSV.
         upper : tuple
-            Three uint8 values to determine the upper value for the range in HSV."""
+            Three uint8 values to determine the upper value for the range in HSV.
+        color: tuple
+            Three uint8 values to determine the RGB color to use to mark the region on the mask."""
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
         mask = cv2.inRange(self.hsv, lower, upper)
-        # Apply the white color where mask == 255
-        self.mask[mask == 255] = (255, 255, 255) # White in BGR
+        # Apply the color where mask == 255
+        self.mask[mask == 255] = color
         self.saved = False
-        self.stack_actions.append({"action": "SelectColorHSV(" + str(lower) + "," + str(upper)+ ")", "saved": self.saved, 
-                                   "size": self.size, "rgb": self.rgb.copy(), "hsv": self.hsv.copy(), "mask": self.mask.copy()})
-        
-
-
-    def deselect_color_hsv(self, lower, upper):
-        """Deselect a region in the mask based on range in HSV colors.
-        
-        Parameters
-        ----------
-        lower : tuple
-            Three uint8 values to determine the lower value for the range in HSV.
-        upper : tuple
-            Three uint8 values to determine the upper value for the range in HSV."""
-        self.truncate_stack()
-        self.cursor_stack_action = len(self.stack_actions)
-        mask = cv2.inRange(self.hsv, lower, upper)
-        # Apply the black color where mask == 255
-        self.mask[mask == 255] = (0, 0, 0) # Black in BGR
-        self.saved = False
-        self.stack_actions.append({"action": "DeselectColorHSV(" + str(lower) + "," + str(upper)+ ")", "saved": self.saved, 
-                                   "size": self.size, "rgb": self.rgb.copy(), "hsv": self.hsv.copy(), "mask": self.mask.copy()})
+        self.stack_actions.append({"action": "SelectColorHSV(" + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
         
 
 
@@ -282,7 +271,158 @@ class ProjectData:
         else:
             return False
 
+# Class for creating the dialog to set up the parameters for the tool pick color
+class PickColorDialog(tk.Toplevel):
+    def __init__(self, parent, callback, initial_values=None):
+        super().__init__(parent)
+        self.title("Pick Color Dialogue")
+        self.geometry("300x350")
+        self.resizable(False, False)
+        self.callback = callback
 
+        self.params = {
+            'H': {'value': 0, 'min': 0, 'max': 179},
+            'S': {'value': 0, 'min': 0, 'max': 255},
+            'V': {'value': 0, 'min': 0, 'max': 255},
+            'R': {'value': 0, 'min': 0, 'max': 255},
+            'G': {'value': 0, 'min': 0, 'max': 255},
+            'B': {'value': 0, 'min': 0, 'max': 255}
+        }
+
+        self.symbol_label = {
+            'H': "±ΔH",
+            'S': "±ΔS",
+            'V': "±ΔV",
+            'R': "±ΔR",
+            'G': "±ΔG",
+            'B': "±ΔB"
+        }
+        
+        self.mode = tk.StringVar(value='HSV')
+        # Override with initial values if provided
+        if initial_values:
+            for key in self.params:
+                if key in initial_values:
+                    self.params[key]['value'] = initial_values[key]
+            if 'mode' in initial_values:
+                self.mode = tk.StringVar(value=initial_values['mode'])
+
+        self.entries = {}
+        self.buttons = {}
+        
+        self.create_widgets()
+
+    def create_widgets(self):
+        # Radio buttons
+        mode_frame = ttk.LabelFrame(self, text="Mode")
+        mode_frame.pack(pady=10)
+
+        hsv_radio = ttk.Radiobutton(mode_frame, text="HSV", variable=self.mode, value="HSV", command=self.update_mode)
+        rgb_radio = ttk.Radiobutton(mode_frame, text="RGB", variable=self.mode, value="RGB", command=self.update_mode)
+        hsv_radio.grid(row=0, column=0, padx=10)
+        rgb_radio.grid(row=0, column=1, padx=10)
+
+        # Parameter controls
+        for param in ['H', 'S', 'V']:
+            frame = ttk.Frame(self)
+            frame.pack(pady=5)
+
+            label = ttk.Label(frame, text=self.symbol_label[param])
+
+            label.grid(row=0, column=0, padx=5)
+
+            minus_btn = ttk.Button(frame, text="-", width=3,
+                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn.grid(row=0, column=1)
+
+            entry = ttk.Entry(frame, width=5, justify='center')
+            entry.insert(0, str(self.params[param]['value']))
+            entry.grid(row=0, column=2)
+
+            plus_btn = ttk.Button(frame, text="+", width=3,
+                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn.grid(row=0, column=3)
+
+            self.entries[param] = entry
+            self.buttons[param] = (minus_btn, plus_btn)
+            
+        # Separator between HSV and RGB
+        ttk.Separator(self, orient='horizontal').pack(fill='x', pady=10)
+        
+        # Parameter controls
+        for param in ['R', 'G', 'B']:
+            frame = ttk.Frame(self)
+            frame.pack(pady=5)
+
+            label = ttk.Label(frame, text=self.symbol_label[param])
+
+            label.grid(row=0, column=0, padx=5)
+
+            minus_btn = ttk.Button(frame, text="-", width=3,
+                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn.grid(row=0, column=1)
+
+            entry = ttk.Entry(frame, width=5, justify='center')
+            entry.insert(0, str(self.params[param]['value']))
+            entry.grid(row=0, column=2)
+
+            plus_btn = ttk.Button(frame, text="+", width=3,
+                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn.grid(row=0, column=3)
+
+            self.entries[param] = entry
+            self.buttons[param] = (minus_btn, plus_btn)
+
+        self.update_mode()  # Set initial state
+        
+        # Submit and Cancel buttons
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(pady=15)
+
+        submit_btn = ttk.Button(btn_frame, text="Submit", command=self.submit)
+        submit_btn.grid(row=0, column=0, padx=10)
+
+        cancel_btn = ttk.Button(btn_frame, text="Cancel", command=self.cancel)
+        cancel_btn.grid(row=0, column=1, padx=10)
+
+    def update_mode(self):
+        mode = self.mode.get()
+        for param in self.params:
+            active = (mode == "HSV" and param in ("H", "S", "V")) or (mode == "RGB" and param in ("R", "G", "B"))
+            state = "normal" if active else "disabled"
+            self.entries[param].config(state=state)
+            for btn in self.buttons[param]:
+                btn.config(state=state)
+
+    def update_value(self, param, delta):
+        try:
+            current = int(self.entries[param].get())
+        except ValueError:
+            current = self.params[param]['min']
+        new_val = max(self.params[param]['min'], min(self.params[param]['max'], current + delta))
+        self.entries[param].delete(0, tk.END)
+        self.entries[param].insert(0, str(new_val))
+
+    def submit(self):
+        values = {}
+        for param in self.params:
+            try:
+                val = int(self.entries[param].get())
+                if self.params[param]['min'] <= val <= self.params[param]['max']:
+                    values[param] = val
+                else:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {param}")
+                return
+        selected_mode = self.mode.get()
+        self.callback(values, selected_mode)  # Pass both values and mode
+        self.destroy()
+        
+    def cancel(self):
+        self.callback(None, None)
+        self.destroy()
+        
 # Class implementing the app
 class ImageViewer:
     def __init__(self, root):
@@ -313,6 +453,20 @@ class ImageViewer:
 
         # Variable for the display
         self.display_status = STATUS_DISPLAY_NONE
+        
+        # Selected color to use on the mask
+        self.current_mask_color = COLOR_MASK_NONE
+        
+        # Tolerance on HSV and RGB values for the tool pick color
+        self.pick_color_params = {
+            'H': 0,
+            'S': 0,
+            'V': 0,
+            'R': 0,
+            'G': 0,
+            'B': 0,
+            "mode": 'HSV'
+        }
 
         # Create the menu bar
         self.menu_bar = tk.Menu(root)
@@ -343,7 +497,18 @@ class ImageViewer:
         self.image_menu.add_checkbutton(label="Crop", command=self.crop_tool, variable=self.crop_flag)
         self.image_menu.add_checkbutton(label="Pick Color", command=self.pick_color_tool, variable=self.pick_color_flag)
         self.image_menu.add_checkbutton(label="Unpick Color", command=self.unpick_color_tool, variable=self.unpick_color_flag)
+        self.image_menu.add_separator()
+        self.image_menu.add_command(label="Pick Color Dialog...", command=self.open_pick_color_dialog)
         self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
+        # Mak Menu
+        self.background_flag = tk.BooleanVar(value=False)
+        self.matrix_flag = tk.BooleanVar(value=False)
+        self.inclusion_flag = tk.BooleanVar(value=False)
+        self.mask_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.mask_menu.add_checkbutton(label="Background", command=self.set_background, variable=self.background_flag)
+        self.mask_menu.add_checkbutton(label="Matrix", command=self.set_matrix, variable=self.matrix_flag)
+        self.mask_menu.add_checkbutton(label="Inclusion", command=self.set_inclusion, variable=self.inclusion_flag)
+        self.menu_bar.add_cascade(label="Mask", menu=self.mask_menu)
         # Attach the menu bar to the root window
         root.config(menu=self.menu_bar)
 
@@ -356,6 +521,11 @@ class ImageViewer:
         self.edit_menu.entryconfig("Redo", state="disabled")
         self.image_menu.entryconfig("Crop", state="disabled")
         self.image_menu.entryconfig("Pick Color", state="disabled")
+        self.image_menu.entryconfig("Unpick Color", state="disabled")
+        self.image_menu.entryconfig("Pick Color Dialog...", state="disabled")
+        self.mask_menu.entryconfig("Background", state="disabled")
+        self.mask_menu.entryconfig("Matrix", state="disabled")
+        self.mask_menu.entryconfig("Inclusion", state="disabled")
         
         # Status bar at the bottom of the window
         self.status_frame = tk.Frame(root, bd=1, relief=tk.SUNKEN)
@@ -609,7 +779,7 @@ class ImageViewer:
                     else:
                         upper = np.array([179, 255, 255])
 
-                    self.project.select_color_hsv(lower, upper)
+                    self.project.select_color_hsv(lower, upper, self.current_mask_color)
                     self.update_undo_redo()
                     self.display_image()
             # Code to unpick a color
@@ -628,7 +798,7 @@ class ImageViewer:
                     else:
                         upper = np.array([179, 255, 255])
 
-                    self.project.deselect_color_hsv(lower, upper)
+                    self.project.select_color_hsv(lower, upper, COLOR_MASK_NONE)
                     self.update_undo_redo()
                     self.display_image()
 
@@ -821,7 +991,12 @@ class ImageViewer:
                 self.zoom_reset_button.config(state="normal")
                 self.image_menu.entryconfig("Crop", state="normal")
                 self.image_menu.entryconfig("Pick Color", state="normal")
+                self.image_menu.entryconfig("Unpick Color", state="normal")
                 self.image_menu.entryconfig("Export Image...", state="normal")
+                self.image_menu.entryconfig("Pick Color Dialog...", state="normal")
+                self.mask_menu.entryconfig("Background", state="normal")
+                self.mask_menu.entryconfig("Matrix", state="normal")
+                self.mask_menu.entryconfig("Inclusion", state="normal")
                 self.status = STATUS_IMAGE_LOADED
             else:
                 messagebox.showerror("Error", "No transition for the status")
@@ -1043,6 +1218,46 @@ class ImageViewer:
     def show_mix(self):
         """Routine to show the blend between the image and the mask."""
         self.change_status_display(STATUS_DISPLAY_MIX)
+        
+    def set_background(self):
+        """Routine to set to mark the background on the mask.
+        """
+        self.background_flag.set(True)
+        self.matrix_flag.set(False)
+        self.inclusion_flag.set(False)
+        self.current_mask_color = COLOR_MASK_BACKGROUND
+        
+    def set_matrix(self):
+        """Routine to set to mark the matrix on the mask.
+        """
+        self.background_flag.set(False)
+        self.matrix_flag.set(True)
+        self.inclusion_flag.set(False)
+        self.current_mask_color = COLOR_MASK_MATRIX
+        
+    def set_inclusion(self):
+        """Routine to set to mark the inclusion on the mask.
+        """
+        self.background_flag.set(False)
+        self.matrix_flag.set(False)
+        self.inclusion_flag.set(True)
+        self.current_mask_color = COLOR_MASK_INCLUSION
+        
+    def open_pick_color_dialog(self):
+        PickColorDialog(self.root, self.pick_color_dialog_receive_values, self.pick_color_params)
+        
+    def pick_color_dialog_receive_values(self, values, mode):
+        if values is not None:
+            if mode == 'HSV':
+                self.pick_color_params['mode'] = 'HSV'
+                self.pick_color_params['H'] = values['H']
+                self.pick_color_params['S'] = values['S']
+                self.pick_color_params['V'] = values['V']
+            else:
+                self.pick_color_params['mode'] = 'RGB'
+                self.pick_color_params['R'] = values['R']
+                self.pick_color_params['G'] = values['G']
+                self.pick_color_params['B'] = values['B']
 
 
 # Run the app
