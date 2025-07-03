@@ -274,12 +274,24 @@ class ProjectData:
 # Class for creating the dialog to set up the parameters for the tool pick color
 class PickColorDialog(tk.Toplevel):
     def __init__(self, parent, callback, initial_values=None):
+        """Constructor.
+
+        Parameters
+        ----------
+        parent : TK class
+            Parent object.
+        callback : function
+            Routine to call to return parameter values to the caller.
+        initial_values : dictionary, optional
+            Initialisation value for the parameters, by default None
+        """
         super().__init__(parent)
         self.title("Pick Color Dialogue")
         self.geometry("300x350")
         self.resizable(False, False)
         self.callback = callback
 
+        # Parameter names and range
         self.params = {
             'H': {'value': 0, 'min': 0, 'max': 179},
             'S': {'value': 0, 'min': 0, 'max': 255},
@@ -289,6 +301,7 @@ class PickColorDialog(tk.Toplevel):
             'B': {'value': 0, 'min': 0, 'max': 255}
         }
 
+        # Parameter symbols
         self.symbol_label = {
             'H': "±ΔH",
             'S': "±ΔS",
@@ -313,6 +326,8 @@ class PickColorDialog(tk.Toplevel):
         self.create_widgets()
 
     def create_widgets(self):
+        """Routine to create the dialogue.
+        """
         # Radio buttons
         mode_frame = ttk.LabelFrame(self, text="Mode")
         mode_frame.pack(pady=10)
@@ -386,6 +401,8 @@ class PickColorDialog(tk.Toplevel):
         cancel_btn.grid(row=0, column=1, padx=10)
 
     def update_mode(self):
+        """Routine to select between HSV and RGB.
+        """
         mode = self.mode.get()
         for param in self.params:
             active = (mode == "HSV" and param in ("H", "S", "V")) or (mode == "RGB" and param in ("R", "G", "B"))
@@ -395,6 +412,7 @@ class PickColorDialog(tk.Toplevel):
                 btn.config(state=state)
 
     def update_value(self, param, delta):
+        """Routine to update the value of the parameters using the buttons."""
         try:
             current = int(self.entries[param].get())
         except ValueError:
@@ -404,6 +422,7 @@ class PickColorDialog(tk.Toplevel):
         self.entries[param].insert(0, str(new_val))
 
     def submit(self):
+        """Routine to submit the changes."""
         values = {}
         for param in self.params:
             try:
@@ -420,6 +439,7 @@ class PickColorDialog(tk.Toplevel):
         self.destroy()
         
     def cancel(self):
+        """Routine to cancel the dialogue."""
         self.callback(None, None)
         self.destroy()
         
@@ -1244,9 +1264,11 @@ class ImageViewer:
         self.current_mask_color = COLOR_MASK_INCLUSION
         
     def open_pick_color_dialog(self):
+        """Routine to open the dialogue to set the parameters for the tool pick color."""
         PickColorDialog(self.root, self.pick_color_dialog_receive_values, self.pick_color_params)
         
     def pick_color_dialog_receive_values(self, values, mode):
+        """Routine to process the values from the dialogue to set the parameters for the tool pick color."""
         if values is not None:
             if mode == 'HSV':
                 self.pick_color_params['mode'] = 'HSV'
