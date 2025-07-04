@@ -24,7 +24,6 @@
 # 1, 2, 3 Switch from image, to mask and to blend of image and mask.
 
 # TODO:
-# - Masking background.
 
 # Author Stefano Giani
 
@@ -159,6 +158,25 @@ class ProjectData:
         self.mask[mask == 255] = color
         self.saved = False
         self.stack_actions.append({"action": "SelectColorHSV(" + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        
+    def select_color_rgb(self, lower, upper, color):
+        """Select a region in the mask based on range in RGB colors.
+        
+        Parameters
+        ----------
+        lower : tuple
+            Three uint8 values to determine the lower value for the range in RGB.
+        upper : tuple
+            Three uint8 values to determine the upper value for the range in RGB.
+        color: tuple
+            Three uint8 values to determine the RGB color to use to mark the region on the mask."""
+        self.truncate_stack()
+        self.cursor_stack_action = len(self.stack_actions)
+        mask = cv2.inRange(np.array(self.rgb), lower, upper)
+        # Apply the color where mask == 255
+        self.mask[mask == 255] = color
+        self.saved = False
+        self.stack_actions.append({"action": "SelectColorRGB(" + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
         
 
 
@@ -432,7 +450,7 @@ class PickColorDialog(tk.Toplevel):
                 else:
                     raise ValueError
             except ValueError:
-                messagebox.showerror("Invalid Input", f"Please enter a valid value for {param}")
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
                 return
         selected_mode = self.mode.get()
         self.callback(values, selected_mode)  # Pass both values and mode
@@ -479,12 +497,12 @@ class ImageViewer:
         
         # Tolerance on HSV and RGB values for the tool pick color
         self.pick_color_params = {
-            'H': 0,
-            'S': 0,
-            'V': 0,
-            'R': 0,
-            'G': 0,
-            'B': 0,
+            'H': 10,
+            'S': 10,
+            'V': 10,
+            'R': 10,
+            'G': 10,
+            'B': 10,
             "mode": 'HSV'
         }
 
@@ -788,18 +806,74 @@ class ImageViewer:
                 x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
                 width, height = self.project.size
                 if 0 <= x < width and 0 <= y < height:
-                    # Get the color at the clicked point
-                    hue = self.project.hsv[y, x, 0]
-                    if hue > 10:
-                        lower = np.array([hue-10, 0, 0])
-                    else:
+                    if self.pick_color_params['mode'] == 'HSV':
+                        # Get the color at the clicked point
+                        hue = self.project.hsv[y, x, 0]
                         lower = np.array([0, 0, 0])
-                    if hue < 179 - 10:
-                        upper = np.array([hue + 10, 255, 255])
-                    else:
-                        upper = np.array([179, 255, 255])
+                        upper = np.array([0, 0, 0])
+                        if hue > self.pick_color_params['H']:
+                            lower[0] = hue - self.pick_color_params['H']
+                        else:
+                            lower[0] = 0
+                        if hue < 179 - self.pick_color_params['H']:
+                            upper[0] = hue + self.pick_color_params['H']
+                        else:
+                            upper[0] = 179
+                            
+                        sat = self.project.hsv[y, x, 1]
+                        if sat > self.pick_color_params['S']:
+                            lower[1] = sat - self.pick_color_params['S']
+                        else:
+                            lower[1] = 0
+                        if sat < 255 - self.pick_color_params['S']:
+                            upper[1] = sat + self.pick_color_params['S']
+                        else:
+                            upper[1] = 255
+                            
+                        bri = self.project.hsv[y, x, 2]
+                        if bri > self.pick_color_params['V']:
+                            lower[2] = bri - self.pick_color_params['V']
+                        else:
+                            lower[2] = 0
+                        if bri < 255 - self.pick_color_params['V']:
+                            upper[2] = bri + self.pick_color_params['V']
+                        else:
+                            upper[2] = 255
 
-                    self.project.select_color_hsv(lower, upper, self.current_mask_color)
+                        self.project.select_color_hsv(lower, upper, self.current_mask_color)
+                    elif self.pick_color_params['mode'] == 'RGB':
+                        # Get the color at the clicked point
+                        red, green, blue = self.project.rgb.getpixel((x, y))
+                        lower = np.array([0, 0, 0])
+                        upper = np.array([0, 0, 0])
+                        if red > self.pick_color_params['R']:
+                            lower[0] = red - self.pick_color_params['R']
+                        else:
+                            lower[0] = 0
+                        if red < 255 - self.pick_color_params['R']:
+                            upper[0] = red + self.pick_color_params['R']
+                        else:
+                            upper[0] = 255
+                            
+                        if green > self.pick_color_params['G']:
+                            lower[1] = green - self.pick_color_params['G']
+                        else:
+                            lower[1] = 0
+                        if green < 255 - self.pick_color_params['G']:
+                            upper[1] = green + self.pick_color_params['G']
+                        else:
+                            upper[1] = 255
+                            
+                        if blue > self.pick_color_params['B']:
+                            lower[2] = blue - self.pick_color_params['B']
+                        else:
+                            lower[2] = 0
+                        if blue < 255 - self.pick_color_params['B']:
+                            upper[2] = blue + self.pick_color_params['B']
+                        else:
+                            upper[2] = 255
+
+                        self.project.select_color_rgb(lower, upper, self.current_mask_color)
                     self.update_undo_redo()
                     self.display_image()
             # Code to unpick a color
@@ -807,18 +881,74 @@ class ImageViewer:
                 x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
                 width, height = self.project.size
                 if 0 <= x < width and 0 <= y < height:
-                    # Get the color at the clicked point
-                    hue = self.project.hsv[y, x, 0]
-                    if hue > 10:
-                        lower = np.array([hue-10, 0, 0])
-                    else:
+                    if self.pick_color_params['mode'] == 'HSV':
+                        # Get the color at the clicked point
+                        hue = self.project.hsv[y, x, 0]
                         lower = np.array([0, 0, 0])
-                    if hue < 179 - 10:
-                        upper = np.array([hue + 10, 255, 255])
-                    else:
-                        upper = np.array([179, 255, 255])
+                        upper = np.array([0, 0, 0])
+                        if hue > self.pick_color_params['H']:
+                            lower[0] = hue - self.pick_color_params['H']
+                        else:
+                            lower[0] = 0
+                        if hue < 179 - self.pick_color_params['H']:
+                            upper[0] = hue + self.pick_color_params['H']
+                        else:
+                            upper[0] = 179
+                            
+                        sat = self.project.hsv[y, x, 1]
+                        if sat > self.pick_color_params['S']:
+                            lower[1] = sat - self.pick_color_params['S']
+                        else:
+                            lower[1] = 0
+                        if sat < 255 - self.pick_color_params['S']:
+                            upper[1] = sat + self.pick_color_params['S']
+                        else:
+                            upper[1] = 255
+                            
+                        bri = self.project.hsv[y, x, 2]
+                        if bri > self.pick_color_params['V']:
+                            lower[2] = bri - self.pick_color_params['V']
+                        else:
+                            lower[2] = 0
+                        if bri < 255 - self.pick_color_params['V']:
+                            upper[2] = bri + self.pick_color_params['V']
+                        else:
+                            upper[2] = 255
 
-                    self.project.select_color_hsv(lower, upper, COLOR_MASK_NONE)
+                        self.project.select_color_hsv(lower, upper, COLOR_MASK_NONE)
+                    elif self.pick_color_params['mode'] == 'RGB':
+                        # Get the color at the clicked point
+                        red, green, blue = self.project.rgb.getpixel((x, y))
+                        lower = np.array([0, 0, 0])
+                        upper = np.array([0, 0, 0])
+                        if red > self.pick_color_params['R']:
+                            lower[0] = red - self.pick_color_params['R']
+                        else:
+                            lower[0] = 0
+                        if red < 255 - self.pick_color_params['R']:
+                            upper[0] = red + self.pick_color_params['R']
+                        else:
+                            upper[0] = 255
+                            
+                        if green > self.pick_color_params['G']:
+                            lower[1] = green - self.pick_color_params['G']
+                        else:
+                            lower[1] = 0
+                        if green < 255 - self.pick_color_params['G']:
+                            upper[1] = green + self.pick_color_params['G']
+                        else:
+                            upper[1] = 255
+                            
+                        if blue > self.pick_color_params['B']:
+                            lower[2] = blue - self.pick_color_params['B']
+                        else:
+                            lower[2] = 0
+                        if blue < 255 - self.pick_color_params['B']:
+                            upper[2] = blue + self.pick_color_params['B']
+                        else:
+                            upper[2] = 255
+
+                        self.project.select_color_rgb(lower, upper, COLOR_MASK_NONE)
                     self.update_undo_redo()
                     self.display_image()
 
@@ -1265,7 +1395,9 @@ class ImageViewer:
         
     def open_pick_color_dialog(self):
         """Routine to open the dialogue to set the parameters for the tool pick color."""
-        PickColorDialog(self.root, self.pick_color_dialog_receive_values, self.pick_color_params)
+        dialog = PickColorDialog(self.root, self.pick_color_dialog_receive_values, self.pick_color_params)
+        dialog.grab_set() # Make the dialog modal
+        self.wait_window(dialog) # Wait until the dialog is closed
         
     def pick_color_dialog_receive_values(self, values, mode):
         """Routine to process the values from the dialogue to set the parameters for the tool pick color."""

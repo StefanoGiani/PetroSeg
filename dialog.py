@@ -121,7 +121,11 @@ class MainApp(tk.Tk):
         self.result_label.pack()
 
     def open_dialog(self):
-        HSVDialog(self, self.receive_values)
+        
+        dialog = HSVDialog(self, self.receive_values)
+        dialog.grab_set() # Make the dialog modal
+        self.wait_window(dialog) # Wait until the dialog is closed
+
 
     def receive_values(self, values, mode):
         if values is None:
