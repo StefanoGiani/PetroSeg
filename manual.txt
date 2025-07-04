@@ -34,6 +34,7 @@ Image - Commands related to images.
 	Crop - Crop the current image.
 	Pick Color - Pick a color to add a region to the mask.
 	Unpick Color - Unpick a color to remove a region from the mask.
+	Pick Color Dialogue... - Dialogue to set the parameters for the Pick Color tool.
 
 Mask - Commands to select what to mark on the Mask
 	Background - Set to select the background region.
