@@ -34,7 +34,9 @@ Image - Commands related to images.
 	Crop - Crop the current image.
 	Pick Color - Pick a color to add a region to the mask.
 	Unpick Color - Unpick a color to remove a region from the mask.
+	Ruler - Virtual ruler.
 	Pick Color Dialogue... - Dialogue to set the parameters for the Pick Color tool.
+	Set Ruler... - Dialogue to set units and to convert between pixels and real units.
 
 Mask - Commands to select what to mark on the Mask
 	Background - Set to select the background region.
@@ -51,6 +53,8 @@ Workflow to Label inclusions:
 
 Load image: Load the image of the thin section to process.
 
+Set the ruler: Set the conversion between pixels and real units.
+
 Crop image: If the image contains unwanted areas, crop it to the part to process.
 
 Mask the background: Using the mask, select the ara in the image containing the background.
@@ -63,6 +67,8 @@ Crop: Crop an image removing unwanted areas. To crop an image choose from the me
 Pick Color: Click on the image to add to the mask all pixels of that color and of similar color.
 
 Unpick Color: Click on the image to remove from the mask all pixels of that color and of similar color.
+
+Ruler: Drag a virtual ruler to measure dimensions of features in images.
 
 Keyboard Shortcutes:
 ----------------------

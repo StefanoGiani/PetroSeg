@@ -9,6 +9,7 @@
 # - Addition of a mask to mark regions. The mask is RGB to allow for more colors and clearer results.
 # - Side panel to report color values and coordinates of the cursor.
 # - Tools to pick and unpick colors to add and remove regions in the mask.
+# - Ruler to measure features on the image and to set conversion between pixels and real units.
 
 # Shortcuts:
 # Ctrl+N New project and open an image.
@@ -33,6 +34,7 @@ from PIL import Image, ImageTk
 import pickle
 import cv2
 import numpy as np
+import math 
 
 # Stati of the app:
 STATUS_NONE = 0 # Just started 
@@ -43,6 +45,7 @@ STATUS_TOOL_NONE = 0 # No tool selected.
 STATUS_TOOL_CROP = 1 # Crop selected
 STATUS_TOOL_PICK_COLOR = 2 # Pick color selected
 STATUS_TOOL_UNPICK_COLOR = 3 # Unpick color selected
+STATUS_TOOL_RULER = 4 # Ruler selected
 
 # Stati for the displayied image
 STATUS_DISPLAY_NONE = 0
@@ -505,6 +508,15 @@ class ImageViewer:
             'B': 10,
             "mode": 'HSV'
         }
+        
+        # Variables for the ruler
+        self.start_point = None
+        self.temp_line = None
+        self.final_line = None
+        self.temp_text = None
+        self.markers = []
+        self.unit = "px"
+        self.conversion_factors = {"px": 1.0, "cm": None, "mm": None, "in": None}
 
         # Create the menu bar
         self.menu_bar = tk.Menu(root)
@@ -529,14 +541,17 @@ class ImageViewer:
         self.crop_flag = tk.BooleanVar(value=False)
         self.pick_color_flag = tk.BooleanVar(value=False)
         self.unpick_color_flag = tk.BooleanVar(value=False)
+        self.ruler_flag = tk.BooleanVar(value=False)
         self.image_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.image_menu.add_command(label="Export Image...", command=self.export_image)
         self.image_menu.add_separator()
         self.image_menu.add_checkbutton(label="Crop", command=self.crop_tool, variable=self.crop_flag)
         self.image_menu.add_checkbutton(label="Pick Color", command=self.pick_color_tool, variable=self.pick_color_flag)
         self.image_menu.add_checkbutton(label="Unpick Color", command=self.unpick_color_tool, variable=self.unpick_color_flag)
+        self.image_menu.add_checkbutton(label="Ruler", command=self.ruler_tool, variable=self.ruler_flag)
         self.image_menu.add_separator()
         self.image_menu.add_command(label="Pick Color Dialog...", command=self.open_pick_color_dialog)
+        self.image_menu.add_command(label="Set Ruler...", command=self.open_set_ruler_dialog)
         self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
         # Mak Menu
         self.background_flag = tk.BooleanVar(value=False)
@@ -561,6 +576,8 @@ class ImageViewer:
         self.image_menu.entryconfig("Pick Color", state="disabled")
         self.image_menu.entryconfig("Unpick Color", state="disabled")
         self.image_menu.entryconfig("Pick Color Dialog...", state="disabled")
+        self.image_menu.entryconfig("Set Ruler...", state="disabled")
+        self.image_menu.entryconfig("Ruler", state="disabled")
         self.mask_menu.entryconfig("Background", state="disabled")
         self.mask_menu.entryconfig("Matrix", state="disabled")
         self.mask_menu.entryconfig("Inclusion", state="disabled")
@@ -685,7 +702,7 @@ class ImageViewer:
         root.bind('<Key-2>', lambda event: self.show_mask())
         root.bind('<Key-3>', lambda event: self.show_mix())
         # Show RGB
-        self.canvas.bind("<Motion>", self.show_info)
+        self.canvas.bind("<Motion>", self.on_motion)
         
         # Init events
         # Intercept message to close app
@@ -951,7 +968,14 @@ class ImageViewer:
                         self.project.select_color_rgb(lower, upper, COLOR_MASK_NONE)
                     self.update_undo_redo()
                     self.display_image()
+                    
+    def on_motion(self, event):
+        """Routine for actions on mouse motion"""
 
+        self.show_info(event)
+        
+        if self.status_tool == STATUS_TOOL_RULER:
+            self.on_drag_ruler(event)
 
     def show_info(self, event):
         """Routine to update the info on the left panel"""
@@ -1040,6 +1064,8 @@ class ImageViewer:
                 cur_x = self.canvas.canvasx(event.x)
                 cur_y = self.canvas.canvasy(event.y)
                 self.canvas.coords(self.rect_id, self.start_x, self.start_y, cur_x, cur_y)
+            elif self.status_tool == STATUS_TOOL_RULER:    
+                self.on_drag_ruler(self, event)
 
     def on_mouse_release(self, event):
         """Routine to crop the image.
@@ -1144,9 +1170,12 @@ class ImageViewer:
                 self.image_menu.entryconfig("Unpick Color", state="normal")
                 self.image_menu.entryconfig("Export Image...", state="normal")
                 self.image_menu.entryconfig("Pick Color Dialog...", state="normal")
+                self.image_menu.entryconfig("Set Ruler...", state="normal")
+                self.image_menu.entryconfig("Ruler", state="normal")
                 self.mask_menu.entryconfig("Background", state="normal")
                 self.mask_menu.entryconfig("Matrix", state="normal")
                 self.mask_menu.entryconfig("Inclusion", state="normal")
+                self.reset_ruler()
                 self.status = STATUS_IMAGE_LOADED
             else:
                 messagebox.showerror("Error", "No transition for the status")
@@ -1184,6 +1213,10 @@ class ImageViewer:
     def unpick_color_tool(self):
         """Routine to select the unpick color tool."""
         self.change_status_tool(STATUS_TOOL_UNPICK_COLOR)
+        
+    def ruler_tool(self):
+        """Routine to select the ruler tool."""
+        self.change_status_tool(STATUS_TOOL_RULER)
 
     def change_status_tool(self, new_status):
         """Routine to transition between stati for the app for tools.
@@ -1221,6 +1254,13 @@ class ImageViewer:
                 self.canvas.config(cursor="arrow")
                 self.status_label_message.config(text="")
                 self.canvas.unbind("<Button-1>")
+                self.status_tool = STATUS_TOOL_NONE
+            elif self.status_tool == STATUS_TOOL_RULER:
+                self.ruler_flag.set(False)
+                self.canvas.config(cursor="arrow")
+                self.status_label_message.config(text="")
+                self.canvas.unbind("<Button-1>")
+                self.reset_ruler()
                 self.status_tool = STATUS_TOOL_NONE
             else:
                 messagebox.showerror("Error", "No transition for the status for tools")
@@ -1263,6 +1303,19 @@ class ImageViewer:
                 # Event for unpicking a color
                 self.canvas.bind("<Button-1>", self.on_click)
                 self.status_tool = STATUS_TOOL_UNPICK_COLOR
+            else:
+                messagebox.showerror("Error", "No transition for the status for tools")   
+        elif new_status == STATUS_TOOL_RULER:
+            # Before chosing a differnt toll, change status to none
+            if self.status_tool is not STATUS_TOOL_NONE:
+                self.change_status_tool( STATUS_TOOL_NONE)
+            if self.status_tool == STATUS_TOOL_NONE:
+                self.ruler_flag.set(True)
+                self.canvas.config(cursor="cross")
+                self.status_label_message.config(text="Click on the image to create a ruler. Esc to cancel.")
+                # Event for unpicking a color
+                self.canvas.bind("<Button-1>", self.on_click_ruler)
+                self.status_tool = STATUS_TOOL_RULER
             else:
                 messagebox.showerror("Error", "No transition for the status for tools")   
         else:
@@ -1412,7 +1465,131 @@ class ImageViewer:
                 self.pick_color_params['R'] = values['R']
                 self.pick_color_params['G'] = values['G']
                 self.pick_color_params['B'] = values['B']
+                
+    def reset_ruler(self, event=None):
+        """Routine to reset the ruler.
 
+        Parameters
+        ----------
+        event : Tkinter event
+            Event to process. Default is None.
+        """
+        self.start_point = None
+        if self.temp_line:
+            self.canvas.delete(self.temp_line)
+            self.temp_line = None
+        if self.final_line:
+            self.canvas.delete(self.final_line)
+            self.final_line = None
+        if self.temp_text:
+            self.canvas.delete(self.temp_text)
+            self.temp_text = None
+        for marker in self.markers:
+            self.canvas.delete(marker)
+        self.markers.clear()
+
+    def on_click_ruler(self, event):
+        """Routine to set end of the ruler.
+
+        Parameters
+        ----------
+        event : Tkinter event
+            Event to process.
+        """
+        if self.start_point is None:
+            self.reset_ruler()
+            self.start_point = (event.x, event.y)
+            marker = self.canvas.create_oval(event.x-3, event.y-3, event.x+3, event.y+3, fill="red")
+            self.markers.append(marker)
+        else:
+            end_point = (event.x, event.y)
+            if self.temp_line:
+                self.canvas.delete(self.temp_line)
+            if self.temp_text:
+                self.canvas.delete(self.temp_text)
+            self.final_line = self.canvas.create_line(self.start_point[0], self.start_point[1],
+                                                      end_point[0], end_point[1], fill="blue", width=2)
+            marker = self.canvas.create_oval(event.x-3, event.y-3, event.x+3, event.y+3, fill="red")
+            self.markers.append(marker)
+            distance_px = math.hypot(end_point[0] - self.start_point[0], end_point[1] - self.start_point[1])
+            distance = distance_px * self.conversion_factors.get(self.unit, 1.0)
+            self.temp_text = self.canvas.create_text((self.start_point[0] + end_point[0]) // 2,
+                                                     (self.start_point[1] + end_point[1]) // 2,
+                                                     text=f"{distance:.2f} {self.unit}", fill="black")
+            self.start_point = None
+    
+    def on_drag_ruler(self, event):
+        """Routine to draw the ruler when moving the cursor.
+
+        Parameters
+        ----------
+        event : Tkinter event
+            Event to process.
+        """
+        if self.start_point:
+            if self.temp_line:
+                self.canvas.delete(self.temp_line)
+            if self.temp_text:
+                self.canvas.delete(self.temp_text)
+            self.temp_line = self.canvas.create_line(self.start_point[0], self.start_point[1],
+                                                     event.x, event.y, fill="gray", dash=(4, 2))
+            distance_px = math.hypot(event.x - self.start_point[0], event.y - self.start_point[1])
+            distance = distance_px * self.conversion_factors.get(self.unit, 1.0)
+            self.temp_text = self.canvas.create_text((self.start_point[0] + event.x) // 2,
+                                                     (self.start_point[1] + event.y) // 2,
+                                                     text=f"{distance:.2f} {self.unit}", fill="gray")
+            
+    def open_set_ruler_dialog(self):
+        """Routine to open the dialog to calibrate the ruler."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Calibrate Ruler")
+
+        tk.Label(dialog, text="Distance in pixels:").grid(row=0, column=0, padx=5, pady=5)
+        pixel_entry = tk.Entry(dialog)
+        pixel_entry.grid(row=0, column=1, padx=5, pady=5)
+        pixel_entry.insert(0, str(self.conversion_factors["px"]))
+
+        tk.Label(dialog, text="Real-world distance:").grid(row=1, column=0, padx=5, pady=5)
+        real_entry = tk.Entry(dialog)
+        real_entry.grid(row=1, column=1, padx=5, pady=5)
+        if self.unit != "px":
+            if self.conversion_factors[self.unit] is not None:
+                real_entry.insert(0, str(self.conversion_factors[self.unit]))
+
+        tk.Label(dialog, text="Unit:").grid(row=1, column=2, padx=5, pady=5)
+        if self.unit != "px":
+            unit_var = tk.StringVar(value=self.unit)
+        else:
+            unit_var = tk.StringVar(value="cm")
+        unit_menu = ttk.Combobox(dialog, textvariable=unit_var, values=["cm", "mm", "in"], state="readonly", width=5)
+        unit_menu.grid(row=1, column=3, padx=5, pady=5)
+
+        tk.Label(dialog, text="Display unit:").grid(row=2, column=0, padx=5, pady=5)
+        display_unit_var = tk.StringVar(value=self.unit)
+        for i, u in enumerate(["px", "cm", "mm", "in"]):
+            tk.Radiobutton(dialog, text=u, variable=display_unit_var, value=u).grid(row=2, column=1+i, padx=2, pady=5)
+
+        def apply_calibration():
+            """Routine to apply choices to ruler."""
+            try:
+                px = float(pixel_entry.get())
+                real = float(real_entry.get())
+                if px <= 0:
+                    raise ValueError("px value must be non-negative")
+                if real <= 0:
+                    raise ValueError("Unit value must be non-negative")
+                unit = unit_var.get()
+                factor = real / px
+                self.conversion_factors["px"] = 1.0
+                self.conversion_factors["cm"] = factor if unit == "cm" else factor / 10 if unit == "mm" else factor * 2.54
+                self.conversion_factors["mm"] = self.conversion_factors["cm"] * 10
+                self.conversion_factors["in"] = self.conversion_factors["cm"] / 2.54
+                self.unit = display_unit_var.get()
+                dialog.destroy()
+            except ValueError:
+                messagebox.showerror("Error", "Please enter valid numbers.")
+
+        tk.Button(dialog, text="Apply", command=apply_calibration).grid(row=3, column=0, columnspan=4, pady=10)
 
 # Run the app
 root = tk.Tk()
