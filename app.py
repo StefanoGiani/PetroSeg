@@ -10,6 +10,7 @@
 # - Side panel to report color values and coordinates of the cursor.
 # - Tools to pick and unpick colors to add and remove regions in the mask.
 # - Ruler to measure features on the image and to set conversion between pixels and real units.
+# - Automatic method to find inclusions based on edges and other criteria.
 
 # Shortcuts:
 # Ctrl+N New project and open an image.
@@ -291,6 +292,109 @@ class ProjectData:
             return True
         else:
             return False
+        
+    def find_inclusions(self, mask_color, range_color, color_encoding='RGB', edge_threshold1=100,
+                        edge_threshold2=200, min_area=1, max_area=1000,
+                        ratio_threshold=0.8, contour_retrieval=cv2.RETR_TREE,
+                        approximation=cv2.CHAIN_APPROX_SIMPLE):
+        """Routine to automatically find inclusions using edges.
+
+        Parameters
+        ----------
+        mask_color : tuple
+            Three uint8 values to determine the RGB color to use to mark the region on the mask.
+        range_color : list of two tuple
+            Two sets of three uint8 values each to determine the lower and upper values for the range in RGB/HSV.
+        color_encoding : str, optional
+            Type of color encoding used in range_color. Either RGB or HSV, by default 'RGB'
+        edge_threshold1 : int, optional
+            Lower bound for the gradient intensity for detecting edges, by default 100
+        edge_threshold2 : int, optional
+            Upper bound for the gradient intensity for detecting edges, by default 200
+            Edges between threshold1 and threshold2 are accepted only if they are connected to strong edges (above edge_threshold2).
+        min_area : int, optional
+            Minimum value for the area in pixels for an iclusion to be considered, by default 1
+        max_area : int, optional
+            Maximum value for the area in pixels for an iclusion to be considered, by default 1000
+        ratio_threshold : float, optional
+            Threshold for the ratio between area and hull area of inclusions. Inclusions above the threshold are cosidered, by default 0.8
+        contour_retrieval : cv2 constant, optional
+            Specifies the hierarchy of contours to retrieve, by default cv2.RETR_TREE
+            cv2.RETR_EXTERNAL: Retrieves only the outermost contours. Used when interested in the external shape of objects.
+            cv2.RETR_LIST: Retrieves all contours without establishing any hierarchical relationships. When you want all contours regardless of nesting, and hierarchy is not important.
+            cv2.RETR_TREE: Retrieves all contours and reconstructs a full hierarchy of nested contours. When you need to understand the structure of nested shapes (e.g., holes inside objects).
+            cv2.RETR_CCOMP: Retrieves all contours and organizes them into a two-level hierarchy (outer and inner). When you want to distinguish between objects and their holes, but don’t need full nesting.
+        approximation : cv2 constantpe, optional
+            Specifies how the contour points are stored:, by default cv2.CHAIN_APPROX_SIMPLE
+            cv2.CHAIN_APPROX_NONE: Stores all the boundary points. This can be memory-intensive.
+            cv2.CHAIN_APPROX_SIMPLE: Compresses horizontal, vertical, and diagonal segments and keeps only their end points. This is more efficient and commonly used.
+
+        Returns
+        -------
+        integer
+            Number of inclusions found.
+        """
+        
+        self.truncate_stack()
+        self.cursor_stack_action = len(self.stack_actions)
+        
+        # Convert image to greyscale
+        image = np.array(self.rgb)
+        gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        # Apply edge detection
+        # Fine-tuning the thresholds in the cv2.Canny() function can help. 
+        # Lower thresholds might detect more edges, while higher thresholds might reduce noise.
+        edges = cv2.Canny(gray_image, edge_threshold1=100, edge_threshold2=200)
+        # Find contours
+        # Experiment with different methods for contour retrieval (cv2.RETR_EXTERNAL, cv2.RETR_TREE, etc.) 
+        # and approximation (cv2.CHAIN_APPROX_SIMPLE, cv2.CHAIN_APPROX_NONE).
+        contours, _ = cv2.findContours(edges, contour_retrieval, approximation)
+        # Create mask
+        if color_encoding=='RGB':
+            mask = cv2.inRange(image, range_color[0], range_color[1]) 
+        else: # HSV
+            mask = cv2.inRange(self.hsv, range_color[0], range_color[1]) 
+            
+        # Combine Contours and color masks
+        filtered_contours = []
+        for contour in contours:
+            
+            area = cv2.contourArea(contour)
+            hull = cv2.convexHull(contour)
+            hull_area = cv2.contourArea(hull)
+            
+            if min_area <= area <= max_area:
+                if hull_area > 0:  # Avoid division by zero
+                    ratio = area / hull_area
+                    if ratio >= ratio_threshold:
+                        filtered_contours.append(contour)
+                        
+        inclusion_count = 0
+        mask_incusions = np.zeros_like(gray_image)
+        for contour in filtered_contours:
+            mask_contour = np.zeros_like(gray_image)
+            cv2.drawContours(mask_contour, [contour], -1, 255, thickness=cv2.FILLED)
+            inclusion_mask = cv2.bitwise_and(mask, mask, mask=mask_contour)
+            inclusions = cv2.findNonZero(inclusion_mask)
+            # add masks
+            mask_incusions += inclusion_mask
+            if inclusions is not None:
+                inclusion_count += 1
+        # Clip mask values        
+        mask_incusions = mask_incusions.clip(0, 255).astype("uint8")
+                
+        # Apply the color where mask == 255
+        self.mask[mask_incusions == 255] = mask_color
+        self.saved = False
+        self.stack_actions.append({"action": "FindInclusions(" + str(mask_color)  + 
+                                   "," + str(range_color)  + "," + str(color_encoding)  + 
+                                   "," + str(edge_threshold1)  + "," + str(edge_threshold2)  + 
+                                   "," + str(min_area)  + "," + str(max_area)  + 
+                                   "," + str(ratio_threshold)  + "," + str(contour_retrieval)  + 
+                                   "," + str(approximation) + ")", "saved": self.saved, "mask": self.mask.copy()})
+                                   
+        return inclusion_count                           
+        
 
 # Class for creating the dialog to set up the parameters for the tool pick color
 class PickColorDialog(tk.Toplevel):
@@ -446,15 +550,14 @@ class PickColorDialog(tk.Toplevel):
         """Routine to submit the changes."""
         values = {}
         for param in self.params:
-            try:
-                val = int(self.entries[param].get())
-                if self.params[param]['min'] <= val <= self.params[param]['max']:
-                    values[param] = val
-                else:
-                    raise ValueError
-            except ValueError:
+            val = int(self.entries[param].get())
+            if self.params[param]['min'] <= val <= self.params[param]['max']:
+                values[param] = val
+            else:
                 messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
                 return
+           
+                
         selected_mode = self.mode.get()
         self.callback(values, selected_mode)  # Pass both values and mode
         self.destroy()
@@ -463,6 +566,300 @@ class PickColorDialog(tk.Toplevel):
         """Routine to cancel the dialogue."""
         self.callback(None, None)
         self.destroy()
+        
+# Class for creating the dialog to set up the parameters for finding the inclusions
+class FindInclusionsDialog(tk.Toplevel):
+    def __init__(self, parent, callback, initial_values=None):
+        """Constructor.
+
+        Parameters
+        ----------
+        parent : TK class
+            Parent object.
+        callback : function
+            Routine to call to return parameter values to the caller.
+        initial_values : dictionary, optional
+            Initialisation value for the parameters, by default None
+        """
+        super().__init__(parent)
+        self.title("Find Inclusions Dialogue")
+        self.geometry("300x350")
+        self.resizable(False, False)
+        self.callback = callback
+
+        # Parameter names and range
+        self.params = {
+            'min H': {'value': 0, 'min': 0, 'max': 179},
+            'min S': {'value': 0, 'min': 0, 'max': 255},
+            'min V': {'value': 0, 'min': 0, 'max': 255},
+            'min R': {'value': 0, 'min': 0, 'max': 255},
+            'min G': {'value': 0, 'min': 0, 'max': 255},
+            'min B': {'value': 0, 'min': 0, 'max': 255},
+            'max H': {'value': 0, 'min': 0, 'max': 179},
+            'max S': {'value': 0, 'min': 0, 'max': 255},
+            'max V': {'value': 0, 'min': 0, 'max': 255},
+            'max R': {'value': 0, 'min': 0, 'max': 255},
+            'max G': {'value': 0, 'min': 0, 'max': 255},
+            'max B': {'value': 0, 'min': 0, 'max': 255}
+        }
+
+        
+        
+        self.mode = tk.StringVar(value='HSV')
+        self.edge_threshold1 = tk.IntVar(value=1)
+        self.edge_threshold2 = tk.IntVar(value=1000)
+        self.area_min = tk.DoubleVar(value=1)
+        self.area_max = tk.DoubleVar(value=1000)
+        self.ratio_threshold = tk.DoubleVar(value=0.8)
+        self.area_unit = tk.StringVar(value="px")  # Default unit
+        # Override with initial values if provided
+        if initial_values:
+            for key in self.params:
+                if key in initial_values:
+                    self.params[key]['value'] = initial_values[key]
+            if 'mode' in initial_values:
+                self.mode = tk.StringVar(value=initial_values['mode'])
+            if 'edge_threshold1' in initial_values:
+                self.edge_threshold1 = tk.IntVar(value=initial_values['edge_threshold1'])
+            if 'edge_threshold2' in initial_values:
+                self.edge_threshold2 = tk.IntVar(value=initial_values['edge_threshold2'])
+            if 'area_min' in initial_values:
+                self.area_min = tk.DoubleVar(value=initial_values['area_min'])
+            if 'area_max' in initial_values:
+                self.area_max = tk.DoubleVar(value=initial_values['area_max'])
+            if 'area_unit' in initial_values:
+                self.area_unit = tk.StringVar(value=initial_values['area_unit'])
+            if 'ratio_threshold' in initial_values:
+                self.ratio_threshold = tk.DoubleVar(value=initial_values['ratio_threshold'])
+
+        self.entries = {}
+        self.buttons = {}
+        
+        # Create a canvas and a vertical scrollbar for scrolling
+        container = ttk.Frame(self)
+        container.pack(fill='both', expand=True)
+
+        canvas = tk.Canvas(container, borderwidth=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        self.scrollable_frame = ttk.Frame(canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        self.create_widgets()
+
+    def create_widgets(self):
+        """Routine to create the dialogue.
+        """
+        # Radio buttons
+        mode_frame = ttk.LabelFrame(self.scrollable, text="Mode")
+        mode_frame.pack(pady=10)
+
+        hsv_radio = ttk.Radiobutton(mode_frame, text="HSV", variable=self.mode, value="HSV", command=self.update_mode)
+        rgb_radio = ttk.Radiobutton(mode_frame, text="RGB", variable=self.mode, value="RGB", command=self.update_mode)
+        hsv_radio.grid(row=0, column=0, padx=10)
+        rgb_radio.grid(row=0, column=1, padx=10)
+
+        # Parameter controls
+        for param in ['min H', 'max H', 'min S', 'max S', 'min V', 'max V']:
+            frame = ttk.Frame(self.scrollable)
+            frame.pack(pady=5)
+
+            label = ttk.Label(frame, text=param)
+
+            label.grid(row=0, column=0, padx=5)
+
+            minus_btn = ttk.Button(frame, text="-", width=3,
+                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn.grid(row=0, column=1)
+
+            entry = ttk.Entry(frame, width=5, justify='center')
+            entry.insert(0, str(self.params[param]['value']))
+            entry.grid(row=0, column=2)
+
+            plus_btn = ttk.Button(frame, text="+", width=3,
+                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn.grid(row=0, column=3)
+
+            self.entries[param] = entry
+            self.buttons[param] = (minus_btn, plus_btn)
+            
+        # Separator between HSV and RGB
+        ttk.Separator(self.scrollable, orient='horizontal').pack(fill='x', pady=10)
+        
+        # Parameter controls
+        for param in ['min R', 'max R', 'min G', 'max G', 'min B', 'max B']:
+            frame = ttk.Frame(self.scrollable)
+            frame.pack(pady=5)
+
+            label = ttk.Label(frame, text=param)
+
+            label.grid(row=0, column=0, padx=5)
+
+            minus_btn = ttk.Button(frame, text="-", width=3,
+                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn.grid(row=0, column=1)
+
+            entry = ttk.Entry(frame, width=5, justify='center')
+            entry.insert(0, str(self.params[param]['value']))
+            entry.grid(row=0, column=2)
+
+            plus_btn = ttk.Button(frame, text="+", width=3,
+                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn.grid(row=0, column=3)
+
+            self.entries[param] = entry
+            self.buttons[param] = (minus_btn, plus_btn)
+
+        self.update_mode()  # Set initial state
+        
+        # Edge thresholds section
+        edge_frame = ttk.LabelFrame(self.scrollable, text="Edge thresholds")
+        edge_frame.pack(pady=10)
+
+        self.edge_min = tk.IntVar(value=0)
+        self.edge_max = tk.IntVar(value=255)
+
+        min_label = ttk.Label(edge_frame, text="Min:")
+        min_label.grid(row=0, column=0, padx=5)
+
+        min_entry = ttk.Entry(edge_frame, textvariable=self.edge_min, width=6, justify='center')
+        min_entry.insert(0, str(self.edge_threshold1))
+        min_entry.grid(row=0, column=1, padx=5)
+
+        max_label = ttk.Label(edge_frame, text="Max:")
+        max_label.grid(row=0, column=2, padx=5)
+
+        max_entry = ttk.Entry(edge_frame, textvariable=self.edge_max, width=6, justify='center')
+        max_entry.insert(0, str(self.edge_threshold2))
+        max_entry.grid(row=0, column=3, padx=5)
+        
+        # Area thresholds section
+        area_frame = ttk.LabelFrame(self.scrollable, text="Area thresholds")
+        area_frame.pack(pady=10)
+
+        area_min_label = ttk.Label(area_frame, text="Min:")
+        area_min_label.grid(row=0, column=0, padx=5)
+
+        area_min_entry = ttk.Entry(area_frame, textvariable=self.area_min, width=8, justify='center')
+        area_min_entry.grid(row=0, column=1, padx=5)
+
+        area_max_label = ttk.Label(area_frame, text="Max:")
+        area_max_label.grid(row=0, column=2, padx=5)
+
+        area_max_entry = ttk.Entry(area_frame, textvariable=self.area_max, width=8, justify='center')
+        area_max_entry.grid(row=0, column=3, padx=5)
+        
+        
+        unit_label = ttk.Label(area_frame, text="Unit:")
+        unit_label.grid(row=0, column=4, padx=5)
+
+        unit_combo = ttk.Combobox(area_frame, textvariable=self.area_unit, values=["px", "cm²", "mm²", "in²"], state="readonly", width=6)
+        unit_combo.grid(row=0, column=5, padx=5)
+
+
+        # Ratio threshold section
+        ratio_frame = ttk.Frame(self)
+        ratio_frame.pack(pady=10)
+
+        ratio_label = ttk.Label(ratio_frame, text="Ratio Threshold:")
+        ratio_label.grid(row=0, column=0, padx=5)
+
+        ratio_entry = ttk.Entry(ratio_frame, textvariable=self.ratio_threshold, width=10, justify='center')
+        ratio_entry.grid(row=0, column=1, padx=5)
+
+        
+        # Submit and Cancel buttons
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(pady=15)
+
+        submit_btn = ttk.Button(btn_frame, text="Submit", command=self.submit)
+        submit_btn.grid(row=0, column=0, padx=10)
+
+        cancel_btn = ttk.Button(btn_frame, text="Cancel", command=self.cancel)
+        cancel_btn.grid(row=0, column=1, padx=10)
+
+    def update_mode(self):
+        """Routine to select between HSV and RGB.
+        """
+        mode = self.mode.get()
+        for param in self.params:
+            active = (mode == "HSV" and param in ('min H', 'max H', 'min S', 'max S', 'min V', 'max V')) or (mode == "RGB" and param in ('min R', 'max R', 'min G', 'max G', 'min B', 'max B'))
+            state = "normal" if active else "disabled"
+            self.entries[param].config(state=state)
+            for btn in self.buttons[param]:
+                btn.config(state=state)
+
+    def update_value(self, param, delta):
+        """Routine to update the value of the parameters using the buttons."""
+        try:
+            current = int(self.entries[param].get())
+        except ValueError:
+            current = self.params[param]['min']
+        new_val = max(self.params[param]['min'], min(self.params[param]['max'], current + delta))
+        self.entries[param].delete(0, tk.END)
+        self.entries[param].insert(0, str(new_val))
+
+    def submit(self):
+        """Routine to submit the changes."""
+        values = {}
+        for param in self.params:
+            val = int(self.entries[param].get())
+            if self.params[param]['min'] <= val <= self.params[param]['max']:
+                values[param] = val
+            else:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
+                return
+        for param in ['H', 'S', 'V', 'R', 'G', 'B']:
+            if self.params['min ' + param]['value'] > self.params['max ' + param]['value']:
+                messagebox.showerror("Invalid Input", f"The minimum value for {param} cannot be greater than the maximum value for {param}")
+                return
+        if self.edge_min.get() > self.edge_max.get():
+                messagebox.showerror("Invalid Input", f"The minimum threshold value for edges cannot be greater than the maximum threshold value")
+                return
+        
+        if self.area_min.get() > self.area_max.get():
+                messagebox.showerror("Invalid Input", f"The minimum area value cannot be greater than the maximum area value")
+                return
+        
+        values['edge_min'] = self.edge_min.get()
+        values['edge_max'] = self.edge_max.get()
+        
+        
+        values['area_min'] = self.area_min.get()
+        values['area_max'] = self.area_max.get()
+        values['area_unit'] = self.area_unit.get()
+        
+        values['ratio_threshold'] = self.ratio_threshold.get()
+
+
+        selected_mode = self.mode.get()
+        self.callback(values, selected_mode)  # Pass both values and mode
+        self.destroy()
+        
+    def cancel(self):
+        """Routine to cancel the dialogue."""
+        self.callback(None, None)
+        self.destroy() 
+        
+    def _on_mousewheel(event):
+        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+
+       
         
 # Class implementing the app
 class ImageViewer:
@@ -552,6 +949,7 @@ class ImageViewer:
         self.image_menu.add_separator()
         self.image_menu.add_command(label="Pick Color Dialog...", command=self.open_pick_color_dialog)
         self.image_menu.add_command(label="Set Ruler...", command=self.open_set_ruler_dialog)
+        self.image_menu.add_command(label="Find Inclusions...", command=self.find_inclusions_dialog)
         self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
         # Mak Menu
         self.background_flag = tk.BooleanVar(value=False)
@@ -577,6 +975,7 @@ class ImageViewer:
         self.image_menu.entryconfig("Unpick Color", state="disabled")
         self.image_menu.entryconfig("Pick Color Dialog...", state="disabled")
         self.image_menu.entryconfig("Set Ruler...", state="disabled")
+        self.image_menu.entryconfig("Find Inclusions...", state="disabled")
         self.image_menu.entryconfig("Ruler", state="disabled")
         self.mask_menu.entryconfig("Background", state="disabled")
         self.mask_menu.entryconfig("Matrix", state="disabled")
@@ -1171,6 +1570,7 @@ class ImageViewer:
                 self.image_menu.entryconfig("Export Image...", state="normal")
                 self.image_menu.entryconfig("Pick Color Dialog...", state="normal")
                 self.image_menu.entryconfig("Set Ruler...", state="normal")
+                self.image_menu.entryconfig("Find Inclusions...", state="normal")
                 self.image_menu.entryconfig("Ruler", state="normal")
                 self.mask_menu.entryconfig("Background", state="normal")
                 self.mask_menu.entryconfig("Matrix", state="normal")

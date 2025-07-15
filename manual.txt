@@ -37,6 +37,7 @@ Image - Commands related to images.
 	Ruler - Virtual ruler.
 	Pick Color Dialogue... - Dialogue to set the parameters for the Pick Color tool.
 	Set Ruler... - Dialogue to set units and to convert between pixels and real units.
+	Find inclusions... - Dialogue to set the parameters to automatically find inclusions based on edge detection.
 
 Mask - Commands to select what to mark on the Mask
 	Background - Set to select the background region.
@@ -59,6 +60,8 @@ Crop image: If the image contains unwanted areas, crop it to the part to process
 
 Mask the background: Using the mask, select the ara in the image containing the background.
 
+Find inclusions: Using the automatic method based on edge detection.
+
 Tools:
 -------
 
@@ -69,6 +72,8 @@ Pick Color: Click on the image to add to the mask all pixels of that color and o
 Unpick Color: Click on the image to remove from the mask all pixels of that color and of similar color.
 
 Ruler: Drag a virtual ruler to measure dimensions of features in images.
+
+Find inclusions: Automatically find inclusions based on edge detection.
 
 Keyboard Shortcutes:
 ----------------------
