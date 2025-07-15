@@ -640,7 +640,7 @@ class FindInclusionsDialog(tk.Toplevel):
         container.pack(fill='both', expand=True)
 
         canvas = tk.Canvas(container, borderwidth=0)
-        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        self.scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
         self.scrollable_frame = ttk.Frame(canvas)
 
         self.scrollable_frame.bind(
@@ -651,13 +651,12 @@ class FindInclusionsDialog(tk.Toplevel):
         )
 
         canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.configure(yscrollcommand=self.scrollbar.set)
 
 
         canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        self.scrollbar.pack(side="right", fill="y")
 
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
         
         self.create_widgets()
 
@@ -855,8 +854,6 @@ class FindInclusionsDialog(tk.Toplevel):
         self.callback(None, None)
         self.destroy() 
         
-    def _on_mousewheel(event):
-        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
 
        
@@ -905,6 +902,31 @@ class ImageViewer:
             'B': 10,
             "mode": 'HSV'
         }
+
+        # Data for the find inclusions dialogue
+        self.find_inclusions_params = {
+            'min H': 0,
+            'min S': 0,
+            'min V': 0,
+            'min R': 0,
+            'min G': 0,
+            'min B': 0,
+            'max H': 0,
+            'max S': 0,
+            'max V': 0,
+            'max R': 0,
+            'max G': 0,
+            'max B': 0,
+            "mode": 'HSV',
+            'edge_threshold1': 10,
+            'edge_threshold2': 100,
+            'area_min': 1,
+            'area_max': 100,
+            'area_min_px': 0,
+            'area_max_px': 0,
+            'area_unit': 'px',
+            'ratio_threshold': 0.8
+        }
         
         # Variables for the ruler
         self.start_point = None
@@ -949,7 +971,7 @@ class ImageViewer:
         self.image_menu.add_separator()
         self.image_menu.add_command(label="Pick Color Dialog...", command=self.open_pick_color_dialog)
         self.image_menu.add_command(label="Set Ruler...", command=self.open_set_ruler_dialog)
-        self.image_menu.add_command(label="Find Inclusions...", command=self.find_inclusions_dialog)
+        self.image_menu.add_command(label="Find Inclusions...", command=self.open_find_inclusions_dialog)
         self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
         # Mak Menu
         self.background_flag = tk.BooleanVar(value=False)
@@ -1990,6 +2012,74 @@ class ImageViewer:
                 messagebox.showerror("Error", "Please enter valid numbers.")
 
         tk.Button(dialog, text="Apply", command=apply_calibration).grid(row=3, column=0, columnspan=4, pady=10)
+
+    def open_find_inclusions_dialog(self):
+        """Routine to open the dialogue to automatically find inclusions."""
+        dialog = FindInclusionsDialog(self.root, self.find_inclusions_dialog_receive_values, self.find_inclusions_params)
+        dialog.grab_set() # Make the dialog modal
+        self.wait_window(dialog) # Wait until the dialog is closed
+
+    def find_inclusions_dialog_receive_values(self, values, mode):
+        """Routine to process the values from the dialogue to automatically find inclusions."""
+        if values is not None:
+            if mode == 'HSV':
+                self.find_inclusions_params['mode'] = 'HSV'
+                self.find_inclusions_params['min H'] = values['min H']
+                self.find_inclusions_params['min S'] = values['min S']
+                self.find_inclusions_params['min V'] = values['min V']
+                self.find_inclusions_params['max H'] = values['max H']
+                self.find_inclusions_params['max S'] = values['max S']
+                self.find_inclusions_params['max V'] = values['max V']
+                range_color = [[values['min H'], values['min S'], values['min V']],
+                               [values['max H'], values['max S'], values['max V']]]
+            else:
+                self.find_inclusions_params['mode'] = 'RGB'
+                self.find_inclusions_params['min R'] = values['min R']
+                self.find_inclusions_params['min G'] = values['min G']
+                self.find_inclusions_params['min B'] = values['min B']
+                self.find_inclusions_params['max R'] = values['max R']
+                self.find_inclusions_params['max G'] = values['max G']
+                self.find_inclusions_params['max B'] = values['max B']
+                range_color = [[values['min R'], values['min G'], values['min B']],
+                               [values['max R'], values['max G'], values['max B']]]
+                
+            self.find_inclusions_params['edge_threshold1'] = values['edge_threshold1']
+            self.find_inclusions_params['edge_threshold2'] = values['edge_threshold2']
+            self.find_inclusions_params['area_min'] = values['area_min']
+            self.find_inclusions_params['area_max'] = values['area_max']
+            self.find_inclusions_params['area_unit'] = values['area_unit']
+            self.find_inclusions_params['ratio_threshold'] = values['ratio_threshold']
+
+            if self.find_inclusions_params['area_unit'] == 'px':
+                self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min'] * self.conversion_factors["cm"]*self.conversion_factors["cm"]
+                self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max'] * self.conversion_factors["cm"]*self.conversion_factors["cm"]
+            elif self.find_inclusions_params['area_unit'] == "cm²":
+                if self.conversion_factors["cm"] is not None:
+                    self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min'] * self.conversion_factors["cm"]*self.conversion_factors["cm"]
+                    self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max'] * self.conversion_factors["cm"]*self.conversion_factors["cm"]
+                else:
+                    messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_inclusions_params['area_unit']} is not set.")
+                    return
+            elif self.find_inclusions_params['area_unit'] == "mm²":
+                if self.conversion_factors["mm"] is not None:
+                    self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min'] * self.conversion_factors["mm"]*self.conversion_factors["mm"]
+                    self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max'] * self.conversion_factors["mm"]*self.conversion_factors["mm"]
+                else:
+                    messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_inclusions_params['area_unit']} is not set.")
+                    return
+            elif self.find_inclusions_params['area_unit'] == "in²":
+                if self.conversion_factors["in"] is not None:
+                    self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min'] * self.conversion_factors["in"]*self.conversion_factors["in"]
+                    self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max'] * self.conversion_factors["in"]*self.conversion_factors["in"]
+                else:
+                    messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_inclusions_params['area_unit']} is not set.")
+                    return
+                
+            self.project.find_inclusions(self.current_mask_color, range_color, self.find_inclusions_params['mode'], self.find_inclusions_params['edge_threshold1'],
+                        self.find_inclusions_params['edge_threshold2'], self.find_inclusions_params['area_min_px'], self.find_inclusions_params['area_max_px'],
+                        self.find_inclusions_params['ratio_threshold'] , contour_retrieval=cv2.RETR_TREE,
+                        approximation=cv2.CHAIN_APPROX_SIMPLE)
+
 
 # Run the app
 root = tk.Tk()
