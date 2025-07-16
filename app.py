@@ -351,10 +351,10 @@ class ProjectData:
         contours, _ = cv2.findContours(edges, contour_retrieval, approximation)
         # Create mask
         if color_encoding=='RGB':
-            mask = cv2.inRange(image, range_color[0], range_color[1]) 
+            mask = cv2.inRange(image, np.asarray(range_color[0]), np.asarray(range_color[1])) 
         else: # HSV
             mask = cv2.inRange(self.hsv, np.asarray(range_color[0]), np.asarray(range_color[1])) 
-            
+
         # Combine Contours and color masks
         filtered_contours = []
         for contour in contours:
@@ -384,7 +384,7 @@ class ProjectData:
         mask_incusions = mask_incusions.clip(0, 255).astype("uint8")
                 
         # Apply the color where mask == 255
-        self.mask[mask_incusions == 255] = mask_color
+        self.mask[mask_incusions != 0] = mask_color
         self.saved = False
         self.stack_actions.append({"action": "FindInclusions(" + str(mask_color)  + 
                                    "," + str(range_color)  + "," + str(color_encoding)  + 
