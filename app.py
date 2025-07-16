@@ -11,6 +11,7 @@
 # - Tools to pick and unpick colors to add and remove regions in the mask.
 # - Ruler to measure features on the image and to set conversion between pixels and real units.
 # - Automatic method to find inclusions based on edges and other criteria.
+# - Select a connected region click with the mouse based on color similarity.
 
 # Shortcuts:
 # Ctrl+N New project and open an image.
@@ -47,6 +48,7 @@ STATUS_TOOL_CROP = 1 # Crop selected
 STATUS_TOOL_PICK_COLOR = 2 # Pick color selected
 STATUS_TOOL_UNPICK_COLOR = 3 # Unpick color selected
 STATUS_TOOL_RULER = 4 # Ruler selected
+STATUS_TOOL_PICK_REGION = 5 # Pick region selected
 
 # Stati for the displayied image
 STATUS_DISPLAY_NONE = 0
@@ -181,6 +183,60 @@ class ProjectData:
         self.mask[mask == 255] = color
         self.saved = False
         self.stack_actions.append({"action": "SelectColorRGB(" + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        
+    def select_region_hsv(self, point, lower, upper, color):
+        """Select a connected region in the mask using HSV.
+        
+        Parameters
+        ----------
+        point : tuple
+            Coordinate of the region.
+        lower : tuple
+            Three uint8 values to determine the lower value for the range in HSV.
+        upper : tuple
+            Three uint8 values to determine the upper value for the range in HSV.
+        color: tuple
+            Three uint8 values to determine the RGB color to use to mark the region on the mask."""
+        self.truncate_stack()
+        self.cursor_stack_action = len(self.stack_actions)
+        mask_floodfill = np.zeros((self.hsv.shape[0]+2, self.hsv.shape[1]+2), np.uint8)
+        cv2.floodFill(self.hsv, mask_floodfill, point, (0, 0, 255),
+                      loDiff=lower, upDiff=upper, flags=4)
+        filled_region = mask_floodfill[1:-1, 1:-1]
+
+        # Create a boolean mask for the condition
+        condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (filled_region != 0)
+
+        self.mask[condition] = color
+        self.saved = False
+        self.stack_actions.append({"action": "SelectRegionHSV(" + str(point) + "," + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        
+    def select_region_rgb(self, point, lower, upper, color):
+        """Select a connected region in the mask using RGB.
+        
+        Parameters
+        ----------
+        point : tuple
+            Coordinate of the region.
+        lower : tuple
+            Three uint8 values to determine the lower value for the range in RGB.
+        upper : tuple
+            Three uint8 values to determine the upper value for the range in RGB.
+        color: tuple
+            Three uint8 values to determine the RGB color to use to mark the region on the mask."""
+        self.truncate_stack()
+        self.cursor_stack_action = len(self.stack_actions)
+        mask_floodfill = np.zeros((self.hsv.shape[0]+2, self.hsv.shape[1]+2), np.uint8)
+        cv2.floodFill(np.array(self.rgb), mask_floodfill, point, color,
+                      loDiff=lower, upDiff=upper, flags=4)
+        filled_region = mask_floodfill[1:-1, 1:-1]
+        
+        # Create a boolean mask for the condition
+        condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (filled_region != 0)
+
+        self.mask[condition] = color
+        self.saved = False
+        self.stack_actions.append({"action": "SelectRegionRGB(" + str(point) + "," + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
         
 
 
@@ -398,7 +454,7 @@ class ProjectData:
 
 # Class for creating the dialog to set up the parameters for the tool pick color
 class PickColorDialog(tk.Toplevel):
-    def __init__(self, parent, callback, initial_values=None):
+    def __init__(self, parent, callback, window_title, initial_values=None):
         """Constructor.
 
         Parameters
@@ -407,11 +463,13 @@ class PickColorDialog(tk.Toplevel):
             Parent object.
         callback : function
             Routine to call to return parameter values to the caller.
+        window_title : string
+            Title of the window.
         initial_values : dictionary, optional
             Initialisation value for the parameters, by default None
         """
         super().__init__(parent)
-        self.title("Pick Color Dialogue")
+        self.title(window_title)
         self.geometry("300x500")
         self.resizable(False, False)
         self.callback = callback
@@ -936,6 +994,17 @@ class ImageViewer:
             "mode": 'HSV'
         }
 
+        # Tolerance on HSV and RGB values for the tool pick region
+        self.pick_region_params = {
+            'H': 10,
+            'S': 10,
+            'V': 10,
+            'R': 10,
+            'G': 10,
+            'B': 10,
+            "mode": 'HSV'
+        }
+
         # Data for the find inclusions dialogue
         self.find_inclusions_params = {
             'min H': 0,
@@ -993,6 +1062,7 @@ class ImageViewer:
         self.crop_flag = tk.BooleanVar(value=False)
         self.pick_color_flag = tk.BooleanVar(value=False)
         self.unpick_color_flag = tk.BooleanVar(value=False)
+        self.pick_region_flag = tk.BooleanVar(value=False)
         self.ruler_flag = tk.BooleanVar(value=False)
         self.image_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.image_menu.add_command(label="Export Image...", command=self.export_image)
@@ -1000,9 +1070,11 @@ class ImageViewer:
         self.image_menu.add_checkbutton(label="Crop", command=self.crop_tool, variable=self.crop_flag)
         self.image_menu.add_checkbutton(label="Pick Color", command=self.pick_color_tool, variable=self.pick_color_flag)
         self.image_menu.add_checkbutton(label="Unpick Color", command=self.unpick_color_tool, variable=self.unpick_color_flag)
+        self.image_menu.add_checkbutton(label="Pick Region", command=self.pick_region_tool, variable=self.pick_region_flag)
         self.image_menu.add_checkbutton(label="Ruler", command=self.ruler_tool, variable=self.ruler_flag)
         self.image_menu.add_separator()
         self.image_menu.add_command(label="Pick Color Dialog...", command=self.open_pick_color_dialog)
+        self.image_menu.add_command(label="Pick Region Dialog...", command=self.open_pick_region_dialog)
         self.image_menu.add_command(label="Set Ruler...", command=self.open_set_ruler_dialog)
         self.image_menu.add_command(label="Find Inclusions...", command=self.open_find_inclusions_dialog)
         self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
@@ -1029,6 +1101,7 @@ class ImageViewer:
         self.image_menu.entryconfig("Pick Color", state="disabled")
         self.image_menu.entryconfig("Unpick Color", state="disabled")
         self.image_menu.entryconfig("Pick Color Dialog...", state="disabled")
+        self.image_menu.entryconfig("Pick Region Dialog...", state="disabled")
         self.image_menu.entryconfig("Set Ruler...", state="disabled")
         self.image_menu.entryconfig("Find Inclusions...", state="disabled")
         self.image_menu.entryconfig("Ruler", state="disabled")
@@ -1347,6 +1420,23 @@ class ImageViewer:
                         self.project.select_color_rgb(lower, upper, self.current_mask_color)
                     self.update_undo_redo()
                     self.display_image()
+            # Code to pick a region
+            elif self.status_tool == STATUS_TOOL_PICK_REGION:
+                x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
+                width, height = self.project.size
+                if 0 <= x < width and 0 <= y < height:
+                    if self.pick_region_params['mode'] == 'HSV':
+                        lower = (self.pick_region_params['H'], self.pick_region_params['S'], self.pick_region_params['V'])
+                        upper = (self.pick_region_params['H'], self.pick_region_params['S'], self.pick_region_params['V'])
+                        
+                        self.project.select_region_hsv((x, y), lower, upper, self.current_mask_color)
+                    elif self.pick_region_params['mode'] == 'RGB':
+                        lower = (self.pick_region_params['R'], self.pick_region_params['G'], self.pick_region_params['B'])
+                        upper = (self.pick_region_params['R'], self.pick_region_params['G'], self.pick_region_params['B'])
+
+                        self.project.select_region_rgb((x, y), lower, upper, self.current_mask_color)
+                    self.update_undo_redo()
+                    self.display_image()
             # Code to unpick a color
             elif self.status_tool == STATUS_TOOL_UNPICK_COLOR:
                 x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
@@ -1624,6 +1714,7 @@ class ImageViewer:
                 self.image_menu.entryconfig("Unpick Color", state="normal")
                 self.image_menu.entryconfig("Export Image...", state="normal")
                 self.image_menu.entryconfig("Pick Color Dialog...", state="normal")
+                self.image_menu.entryconfig("Pick Region Dialog...", state="normal")
                 self.image_menu.entryconfig("Set Ruler...", state="normal")
                 self.image_menu.entryconfig("Find Inclusions...", state="normal")
                 self.image_menu.entryconfig("Ruler", state="normal")
@@ -1665,10 +1756,15 @@ class ImageViewer:
     def pick_color_tool(self):
         """Routine to select the pick color tool."""
         self.change_status_tool(STATUS_TOOL_PICK_COLOR)
+    
     def unpick_color_tool(self):
         """Routine to select the unpick color tool."""
         self.change_status_tool(STATUS_TOOL_UNPICK_COLOR)
-        
+
+    def pick_region_tool(self):
+        """Routine to select the pick region tool."""
+        self.change_status_tool(STATUS_TOOL_PICK_REGION)
+
     def ruler_tool(self):
         """Routine to select the ruler tool."""
         self.change_status_tool(STATUS_TOOL_RULER)
@@ -1717,6 +1813,11 @@ class ImageViewer:
                 self.canvas.unbind("<Button-1>")
                 self.reset_ruler()
                 self.status_tool = STATUS_TOOL_NONE
+            elif self.status_tool == STATUS_TOOL_PICK_REGION:
+                self.pick_region_flag.set(False)
+                self.canvas.config(cursor="arrow")
+                self.status_label_message.config(text="")
+                self.canvas.unbind("<Button-1>")
             else:
                 messagebox.showerror("Error", "No transition for the status for tools")
         elif new_status == STATUS_TOOL_CROP:
@@ -1773,6 +1874,19 @@ class ImageViewer:
                 self.status_tool = STATUS_TOOL_RULER
             else:
                 messagebox.showerror("Error", "No transition for the status for tools")   
+        elif new_status == STATUS_TOOL_PICK_REGION:
+            # Before chosing a differnt toll, change status to none
+            if self.status_tool is not STATUS_TOOL_NONE:
+                self.change_status_tool( STATUS_TOOL_NONE)
+            if self.status_tool == STATUS_TOOL_NONE:
+                self.pick_region_flag.set(True)
+                self.canvas.config(cursor="cross")
+                self.status_label_message.config(text="Click on the image to select a region. Esc to cancel.")
+                # Event for picking a color
+                self.canvas.bind("<Button-1>", self.on_click)
+                self.status_tool = STATUS_TOOL_PICK_REGION
+            else:
+                messagebox.showerror("Error", "No transition for the status for tools")  
         else:
             messagebox.showerror("Error", "Unknown status for tools")
 
@@ -1903,7 +2017,13 @@ class ImageViewer:
         
     def open_pick_color_dialog(self):
         """Routine to open the dialogue to set the parameters for the tool pick color."""
-        dialog = PickColorDialog(self.root, self.pick_color_dialog_receive_values, self.pick_color_params)
+        dialog = PickColorDialog(self.root, self.pick_color_dialog_receive_values, "Pick Color Dialogue", self.pick_color_params)
+        dialog.grab_set() # Make the dialog modal
+        self.root.wait_window(dialog) # Wait until the dialog is closed
+
+    def open_pick_region_dialog(self):
+        """Routine to open the dialogue to set the parameters for the tool pick region."""
+        dialog = PickColorDialog(self.root, self.pick_region_dialog_receive_values, "Pick region Dialogue", self.pick_region_params)
         dialog.grab_set() # Make the dialog modal
         self.root.wait_window(dialog) # Wait until the dialog is closed
         
@@ -1920,6 +2040,20 @@ class ImageViewer:
                 self.pick_color_params['R'] = values['R']
                 self.pick_color_params['G'] = values['G']
                 self.pick_color_params['B'] = values['B']
+
+    def pick_region_dialog_receive_values(self, values, mode):
+        """Routine to process the values from the dialogue to set the parameters for the tool pick region."""
+        if values is not None:
+            if mode == 'HSV':
+                self.pick_region_params['mode'] = 'HSV'
+                self.pick_region_params['H'] = values['H']
+                self.pick_region_params['S'] = values['S']
+                self.pick_region_params['V'] = values['V']
+            else:
+                self.pick_region_params['mode'] = 'RGB'
+                self.pick_region_params['R'] = values['R']
+                self.pick_region_params['G'] = values['G']
+                self.pick_region_params['B'] = values['B']
                 
     def reset_ruler(self, event=None):
         """Routine to reset the ruler.
