@@ -344,7 +344,7 @@ class ProjectData:
         # Apply edge detection
         # Fine-tuning the thresholds in the cv2.Canny() function can help. 
         # Lower thresholds might detect more edges, while higher thresholds might reduce noise.
-        edges = cv2.Canny(gray_image, edge_threshold1=100, edge_threshold2=200)
+        edges = cv2.Canny(gray_image, edge_threshold1, edge_threshold2)
         # Find contours
         # Experiment with different methods for contour retrieval (cv2.RETR_EXTERNAL, cv2.RETR_TREE, etc.) 
         # and approximation (cv2.CHAIN_APPROX_SIMPLE, cv2.CHAIN_APPROX_NONE).
@@ -353,7 +353,7 @@ class ProjectData:
         if color_encoding=='RGB':
             mask = cv2.inRange(image, range_color[0], range_color[1]) 
         else: # HSV
-            mask = cv2.inRange(self.hsv, range_color[0], range_color[1]) 
+            mask = cv2.inRange(self.hsv, np.asarray(range_color[0]), np.asarray(range_color[1])) 
             
         # Combine Contours and color masks
         filtered_contours = []
@@ -412,7 +412,7 @@ class PickColorDialog(tk.Toplevel):
         """
         super().__init__(parent)
         self.title("Pick Color Dialogue")
-        self.geometry("300x350")
+        self.geometry("300x500")
         self.resizable(False, False)
         self.callback = callback
 
@@ -451,80 +451,67 @@ class PickColorDialog(tk.Toplevel):
         self.create_widgets()
 
     def create_widgets(self):
-        """Routine to create the dialogue.
-        """
+        """Routine to create the dialogue."""
         # Radio buttons
         mode_frame = ttk.LabelFrame(self, text="Mode")
         mode_frame.pack(pady=10)
-
         hsv_radio = ttk.Radiobutton(mode_frame, text="HSV", variable=self.mode, value="HSV", command=self.update_mode)
         rgb_radio = ttk.Radiobutton(mode_frame, text="RGB", variable=self.mode, value="RGB", command=self.update_mode)
         hsv_radio.grid(row=0, column=0, padx=10)
         rgb_radio.grid(row=0, column=1, padx=10)
 
-        # Parameter controls
+        # Frame to hold both HSV and RGB columns
+        dual_column_frame = ttk.Frame(self)
+        dual_column_frame.pack(pady=10)
+
+        # HSV column
+        hsv_column = ttk.Frame(dual_column_frame)
+        hsv_column.grid(row=0, column=0, padx=(0, 10))
         for param in ['H', 'S', 'V']:
-            frame = ttk.Frame(self)
+            frame = ttk.Frame(hsv_column)
             frame.pack(pady=5)
-
             label = ttk.Label(frame, text=self.symbol_label[param])
-
             label.grid(row=0, column=0, padx=5)
-
-            minus_btn = ttk.Button(frame, text="-", width=3,
-                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn = ttk.Button(frame, text="-", width=3, command=lambda p=param: self.update_value(p, -1))
             minus_btn.grid(row=0, column=1)
-
             entry = ttk.Entry(frame, width=5, justify='center')
             entry.insert(0, str(self.params[param]['value']))
             entry.grid(row=0, column=2)
-
-            plus_btn = ttk.Button(frame, text="+", width=3,
-                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn = ttk.Button(frame, text="+", width=3, command=lambda p=param: self.update_value(p, 1))
             plus_btn.grid(row=0, column=3)
-
             self.entries[param] = entry
             self.buttons[param] = (minus_btn, plus_btn)
-            
-        # Separator between HSV and RGB
-        ttk.Separator(self, orient='horizontal').pack(fill='x', pady=10)
-        
-        # Parameter controls
+
+        # Vertical separator
+        ttk.Separator(dual_column_frame, orient='vertical').grid(row=0, column=1, sticky='ns', padx=5)
+
+        # RGB column
+        rgb_column = ttk.Frame(dual_column_frame)
+        rgb_column.grid(row=0, column=2, padx=(10, 0))
         for param in ['R', 'G', 'B']:
-            frame = ttk.Frame(self)
+            frame = ttk.Frame(rgb_column)
             frame.pack(pady=5)
-
             label = ttk.Label(frame, text=self.symbol_label[param])
-
             label.grid(row=0, column=0, padx=5)
-
-            minus_btn = ttk.Button(frame, text="-", width=3,
-                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn = ttk.Button(frame, text="-", width=3, command=lambda p=param: self.update_value(p, -1))
             minus_btn.grid(row=0, column=1)
-
             entry = ttk.Entry(frame, width=5, justify='center')
             entry.insert(0, str(self.params[param]['value']))
             entry.grid(row=0, column=2)
-
-            plus_btn = ttk.Button(frame, text="+", width=3,
-                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn = ttk.Button(frame, text="+", width=3, command=lambda p=param: self.update_value(p, 1))
             plus_btn.grid(row=0, column=3)
-
             self.entries[param] = entry
             self.buttons[param] = (minus_btn, plus_btn)
 
-        self.update_mode()  # Set initial state
-        
+        self.update_mode()
+
         # Submit and Cancel buttons
         btn_frame = ttk.Frame(self)
         btn_frame.pack(pady=15)
-
         submit_btn = ttk.Button(btn_frame, text="Submit", command=self.submit)
         submit_btn.grid(row=0, column=0, padx=10)
-
         cancel_btn = ttk.Button(btn_frame, text="Cancel", command=self.cancel)
         cancel_btn.grid(row=0, column=1, padx=10)
-
     def update_mode(self):
         """Routine to select between HSV and RGB.
         """
@@ -550,10 +537,14 @@ class PickColorDialog(tk.Toplevel):
         """Routine to submit the changes."""
         values = {}
         for param in self.params:
-            val = int(self.entries[param].get())
-            if self.params[param]['min'] <= val <= self.params[param]['max']:
-                values[param] = val
-            else:
+            try:
+                val = int(self.entries[param].get())
+                if self.params[param]['min'] <= val <= self.params[param]['max']:
+                    values[param] = val
+                else:
+                    messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
+                    return
+            except ValueError:
                 messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
                 return
            
@@ -583,7 +574,7 @@ class FindInclusionsDialog(tk.Toplevel):
         """
         super().__init__(parent)
         self.title("Find Inclusions Dialogue")
-        self.geometry("300x350")
+        self.geometry("400x600")
         self.resizable(False, False)
         self.callback = callback
 
@@ -639,23 +630,15 @@ class FindInclusionsDialog(tk.Toplevel):
         container = ttk.Frame(self)
         container.pack(fill='both', expand=True)
 
-        canvas = tk.Canvas(container, borderwidth=0)
-        self.scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
-        self.scrollable_frame = ttk.Frame(canvas)
+        canvas = tk.Canvas(container, borderwidth=0, height=350)
+        self.frame = ttk.Frame(canvas)
 
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(
-                scrollregion=canvas.bbox("all")
-            )
-        )
 
-        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=self.scrollbar.set)
+        canvas.create_window((0, 0), window=self.frame, anchor="nw")
+
 
 
         canvas.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
 
         
         self.create_widgets()
@@ -663,91 +646,28 @@ class FindInclusionsDialog(tk.Toplevel):
     def create_widgets(self):
         """Routine to create the dialogue.
         """
-        # Radio buttons
-        mode_frame = ttk.LabelFrame(self.scrollable, text="Mode")
-        mode_frame.pack(pady=10)
 
-        hsv_radio = ttk.Radiobutton(mode_frame, text="HSV", variable=self.mode, value="HSV", command=self.update_mode)
-        rgb_radio = ttk.Radiobutton(mode_frame, text="RGB", variable=self.mode, value="RGB", command=self.update_mode)
-        hsv_radio.grid(row=0, column=0, padx=10)
-        rgb_radio.grid(row=0, column=1, padx=10)
-
-        # Parameter controls
-        for param in ['min H', 'max H', 'min S', 'max S', 'min V', 'max V']:
-            frame = ttk.Frame(self.scrollable)
-            frame.pack(pady=5)
-
-            label = ttk.Label(frame, text=param)
-
-            label.grid(row=0, column=0, padx=5)
-
-            minus_btn = ttk.Button(frame, text="-", width=3,
-                                   command=lambda p=param: self.update_value(p, -1))
-            minus_btn.grid(row=0, column=1)
-
-            entry = ttk.Entry(frame, width=5, justify='center')
-            entry.insert(0, str(self.params[param]['value']))
-            entry.grid(row=0, column=2)
-
-            plus_btn = ttk.Button(frame, text="+", width=3,
-                                  command=lambda p=param: self.update_value(p, 1))
-            plus_btn.grid(row=0, column=3)
-
-            self.entries[param] = entry
-            self.buttons[param] = (minus_btn, plus_btn)
-            
-        # Separator between HSV and RGB
-        ttk.Separator(self.scrollable, orient='horizontal').pack(fill='x', pady=10)
-        
-        # Parameter controls
-        for param in ['min R', 'max R', 'min G', 'max G', 'min B', 'max B']:
-            frame = ttk.Frame(self.scrollable)
-            frame.pack(pady=5)
-
-            label = ttk.Label(frame, text=param)
-
-            label.grid(row=0, column=0, padx=5)
-
-            minus_btn = ttk.Button(frame, text="-", width=3,
-                                   command=lambda p=param: self.update_value(p, -1))
-            minus_btn.grid(row=0, column=1)
-
-            entry = ttk.Entry(frame, width=5, justify='center')
-            entry.insert(0, str(self.params[param]['value']))
-            entry.grid(row=0, column=2)
-
-            plus_btn = ttk.Button(frame, text="+", width=3,
-                                  command=lambda p=param: self.update_value(p, 1))
-            plus_btn.grid(row=0, column=3)
-
-            self.entries[param] = entry
-            self.buttons[param] = (minus_btn, plus_btn)
-
-        self.update_mode()  # Set initial state
-        
         # Edge thresholds section
-        edge_frame = ttk.LabelFrame(self.scrollable, text="Edge thresholds")
+        edge_frame = ttk.LabelFrame(self.frame, text="Edge thresholds")
         edge_frame.pack(pady=10)
 
-        self.edge_min = tk.IntVar(value=0)
-        self.edge_max = tk.IntVar(value=255)
+        self.edge_min = self.edge_threshold1
+        self.edge_max = self.edge_threshold2
 
         min_label = ttk.Label(edge_frame, text="Min:")
         min_label.grid(row=0, column=0, padx=5)
 
         min_entry = ttk.Entry(edge_frame, textvariable=self.edge_min, width=6, justify='center')
-        min_entry.insert(0, str(self.edge_threshold1))
         min_entry.grid(row=0, column=1, padx=5)
 
         max_label = ttk.Label(edge_frame, text="Max:")
         max_label.grid(row=0, column=2, padx=5)
 
         max_entry = ttk.Entry(edge_frame, textvariable=self.edge_max, width=6, justify='center')
-        max_entry.insert(0, str(self.edge_threshold2))
         max_entry.grid(row=0, column=3, padx=5)
         
         # Area thresholds section
-        area_frame = ttk.LabelFrame(self.scrollable, text="Area thresholds")
+        area_frame = ttk.LabelFrame(self.frame, text="Area thresholds")
         area_frame.pack(pady=10)
 
         area_min_label = ttk.Label(area_frame, text="Min:")
@@ -771,7 +691,7 @@ class FindInclusionsDialog(tk.Toplevel):
 
 
         # Ratio threshold section
-        ratio_frame = ttk.Frame(self)
+        ratio_frame = ttk.LabelFrame(self.frame, text="Ratio thresholds")
         ratio_frame.pack(pady=10)
 
         ratio_label = ttk.Label(ratio_frame, text="Ratio Threshold:")
@@ -780,9 +700,81 @@ class FindInclusionsDialog(tk.Toplevel):
         ratio_entry = ttk.Entry(ratio_frame, textvariable=self.ratio_threshold, width=10, justify='center')
         ratio_entry.grid(row=0, column=1, padx=5)
 
+        # Radio buttons
+        mode_frame = ttk.LabelFrame(self.frame, text="Mode")
+        mode_frame.pack(pady=10)
+
+        hsv_radio = ttk.Radiobutton(mode_frame, text="HSV", variable=self.mode, value="HSV", command=self.update_mode)
+        rgb_radio = ttk.Radiobutton(mode_frame, text="RGB", variable=self.mode, value="RGB", command=self.update_mode)
+        hsv_radio.grid(row=0, column=0, padx=10)
+        rgb_radio.grid(row=0, column=1, padx=10)
+
+        # Frame to hold both HSV and RGB columns
+        dual_column_frame = ttk.Frame(self.frame)
+        dual_column_frame.pack(pady=10)
+
+        # HSV column
+        hsv_column = ttk.Frame(dual_column_frame)
+        hsv_column.grid(row=0, column=0, padx=(0, 0))
+        for param in ['min H', 'max H', 'min S', 'max S', 'min V', 'max V']:
+            frame = ttk.Frame(hsv_column)
+            frame.pack(pady=5)
+
+            label = ttk.Label(frame, text=param)
+
+            label.grid(row=0, column=0, padx=5)
+
+            minus_btn = ttk.Button(frame, text="-", width=3,
+                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn.grid(row=0, column=1)
+
+            entry = ttk.Entry(frame, width=5, justify='center')
+            entry.insert(0, str(self.params[param]['value']))
+            entry.grid(row=0, column=2)
+
+            plus_btn = ttk.Button(frame, text="+", width=3,
+                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn.grid(row=0, column=3)
+
+            self.entries[param] = entry
+            self.buttons[param] = (minus_btn, plus_btn)
+            
+        # Vertical separator
+        ttk.Separator(dual_column_frame, orient='vertical').grid(row=0, column=1, sticky='ns', padx=5)
+        
+        # RGB column
+        rgb_column = ttk.Frame(dual_column_frame)
+        rgb_column.grid(row=0, column=2, padx=(10, 0))
+        for param in ['min R', 'max R', 'min G', 'max G', 'min B', 'max B']:
+            frame = ttk.Frame(rgb_column)
+            frame.pack(pady=5)
+
+            label = ttk.Label(frame, text=param)
+
+            label.grid(row=0, column=0, padx=5)
+
+            minus_btn = ttk.Button(frame, text="-", width=3,
+                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn.grid(row=0, column=1)
+
+            entry = ttk.Entry(frame, width=5, justify='center')
+            entry.insert(0, str(self.params[param]['value']))
+            entry.grid(row=0, column=2)
+
+            plus_btn = ttk.Button(frame, text="+", width=3,
+                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn.grid(row=0, column=3)
+
+            self.entries[param] = entry
+            self.buttons[param] = (minus_btn, plus_btn)
+
+        self.update_mode()  # Set initial state
+        
+        
+
         
         # Submit and Cancel buttons
-        btn_frame = ttk.Frame(self)
+        btn_frame = ttk.Frame(self.frame)
         btn_frame.pack(pady=15)
 
         submit_btn = ttk.Button(btn_frame, text="Submit", command=self.submit)
@@ -816,23 +808,64 @@ class FindInclusionsDialog(tk.Toplevel):
         """Routine to submit the changes."""
         values = {}
         for param in self.params:
-            val = int(self.entries[param].get())
-            if self.params[param]['min'] <= val <= self.params[param]['max']:
-                values[param] = val
-            else:
+            try:
+                val = int(self.entries[param].get())
+                if self.params[param]['min'] <= val <= self.params[param]['max']:
+                    values[param] = val
+                else:
+                    messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
+                    return
+            except ValueError:
                 messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
                 return
         for param in ['H', 'S', 'V', 'R', 'G', 'B']:
+            try:
+                val = int(self.entries['min ' + param].get())
+                
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {'min ' + param}")
+                return
+            try:
+                val = int(self.entries['max ' + param].get())
+                
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {'max ' + param}")
+                return
             if self.params['min ' + param]['value'] > self.params['max ' + param]['value']:
                 messagebox.showerror("Invalid Input", f"The minimum value for {param} cannot be greater than the maximum value for {param}")
                 return
+        try:
+            val = int(self.edge_min.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the minimum threshold value for edges")
+            return
+        try:
+            val = int(self.edge_max.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the maximum threshold value for edges")
+            return
         if self.edge_min.get() > self.edge_max.get():
                 messagebox.showerror("Invalid Input", f"The minimum threshold value for edges cannot be greater than the maximum threshold value")
                 return
-        
+        try:
+            val = int(self.area_min.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the minimum area")
+            return
+        try:
+            val = int(self.area_max.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the maximum area")
+            return
         if self.area_min.get() > self.area_max.get():
                 messagebox.showerror("Invalid Input", f"The minimum area value cannot be greater than the maximum area value")
                 return
+        
+        try:
+            val = float(self.ratio_threshold.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the ratio threshold")
+            return
         
         values['edge_min'] = self.edge_min.get()
         values['edge_max'] = self.edge_max.get()
@@ -918,10 +951,10 @@ class ImageViewer:
             'max G': 0,
             'max B': 0,
             "mode": 'HSV',
-            'edge_threshold1': 10,
-            'edge_threshold2': 100,
+            'edge_threshold1': 100,
+            'edge_threshold2': 200,
             'area_min': 1,
-            'area_max': 100,
+            'area_max': 1000,
             'area_min_px': 0,
             'area_max_px': 0,
             'area_unit': 'px',
@@ -1872,7 +1905,7 @@ class ImageViewer:
         """Routine to open the dialogue to set the parameters for the tool pick color."""
         dialog = PickColorDialog(self.root, self.pick_color_dialog_receive_values, self.pick_color_params)
         dialog.grab_set() # Make the dialog modal
-        self.wait_window(dialog) # Wait until the dialog is closed
+        self.root.wait_window(dialog) # Wait until the dialog is closed
         
     def pick_color_dialog_receive_values(self, values, mode):
         """Routine to process the values from the dialogue to set the parameters for the tool pick color."""
@@ -2017,7 +2050,7 @@ class ImageViewer:
         """Routine to open the dialogue to automatically find inclusions."""
         dialog = FindInclusionsDialog(self.root, self.find_inclusions_dialog_receive_values, self.find_inclusions_params)
         dialog.grab_set() # Make the dialog modal
-        self.wait_window(dialog) # Wait until the dialog is closed
+        self.root.wait_window(dialog) # Wait until the dialog is closed
 
     def find_inclusions_dialog_receive_values(self, values, mode):
         """Routine to process the values from the dialogue to automatically find inclusions."""
@@ -2043,16 +2076,16 @@ class ImageViewer:
                 range_color = [[values['min R'], values['min G'], values['min B']],
                                [values['max R'], values['max G'], values['max B']]]
                 
-            self.find_inclusions_params['edge_threshold1'] = values['edge_threshold1']
-            self.find_inclusions_params['edge_threshold2'] = values['edge_threshold2']
+            self.find_inclusions_params['edge_threshold1'] = values['edge_min']
+            self.find_inclusions_params['edge_threshold2'] = values['edge_max']
             self.find_inclusions_params['area_min'] = values['area_min']
             self.find_inclusions_params['area_max'] = values['area_max']
             self.find_inclusions_params['area_unit'] = values['area_unit']
             self.find_inclusions_params['ratio_threshold'] = values['ratio_threshold']
 
             if self.find_inclusions_params['area_unit'] == 'px':
-                self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min'] * self.conversion_factors["cm"]*self.conversion_factors["cm"]
-                self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max'] * self.conversion_factors["cm"]*self.conversion_factors["cm"]
+                self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min']
+                self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max']
             elif self.find_inclusions_params['area_unit'] == "cm²":
                 if self.conversion_factors["cm"] is not None:
                     self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min'] * self.conversion_factors["cm"]*self.conversion_factors["cm"]
