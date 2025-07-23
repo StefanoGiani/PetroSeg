@@ -217,7 +217,9 @@ class ProjectData:
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
         mask_floodfill = np.zeros((self.hsv.shape[0]+2, self.hsv.shape[1]+2), np.uint8)
-        cv2.floodFill(self.hsv, mask_floodfill, point, (0, 0, 255),
+        # I have to create a copy becuase cv2.floodFill update the image as well
+        hsv_tmp = self.hsv.copy()
+        cv2.floodFill(hsv_tmp, mask_floodfill, point, (0, 0, 255),
                       loDiff=lower, upDiff=upper, flags=4)
         filled_region = mask_floodfill[1:-1, 1:-1]
 
