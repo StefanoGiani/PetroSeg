@@ -24,10 +24,3 @@ pip install numpy
 pip install opencv-python
 
 pip install pickle
-
-
-Comments:
-----------
-
-1. Very slow to work with images. Add timeglass animation when something is done.
-2. Try to speed up image processing for large images.

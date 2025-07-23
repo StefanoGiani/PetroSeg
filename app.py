@@ -27,6 +27,9 @@
 # 1, 2, 3 Switch from image, to mask and to blend of image and mask.
 
 # TODO:
+# 1. Very slow to work with images. Add timeglass animation when something is done.
+# 2. Try to speed up image processing for large images.
+# 3. When no tools are selected, click and drag to move image.
 
 # Author Stefano Giani
 
@@ -64,7 +67,7 @@ COLOR_MASK_INCLUSION = (0,255,0)
 
 # Class to contain the data for the projecy
 class ProjectData:
-    def __init__(self, project_path = None, image_path = None ):
+    def __init__(self, project_path = None, image_path = None, clear_stack_flag = False ):
         """Constructor.
         It can be called with no parameters to create an empty project, 
         or it can be called passing either a path of an image file or a
@@ -76,6 +79,8 @@ class ProjectData:
             Path to the file containing the project to open.
         image_path : string
             Path to the file containing the image to open.
+        clear_stack_flag : logical
+            Flag to clear the stack of actions for the loaded project, by default False.
         """
         if image_path is not None:
         
@@ -89,12 +94,12 @@ class ProjectData:
             self.stack_actions = []
             self.stack_actions.append({"action": "LoadImage(" + image_path + ")", "saved": self.saved, "size": self.size, "rgb": self.rgb.copy(), "hsv": self.hsv.copy(), 
                                        "mask":self.mask.copy()})
-            self.cursor_stack_action = 0
+            self.cursor_stack_action = -1
             self.project_file = None
             self.unit = "px"
             self.conversion_factors = {"px": 1.0, "cm": None, "mm": None, "in": None}
         elif project_path is not None:
-            self.load(project_path)
+            self.load(project_path, clear_stack_flag)
         else:
             self.rgb = None
             self.hsv = None
@@ -131,13 +136,15 @@ class ProjectData:
             pickle.dump(state, f)
         self.saved = True
 
-    def load(self, project_path):
+    def load(self, project_path, clear_stack_flag = False):
         """Routine to load a project from disk.
 
         Parameters
         ----------
         project_path : string
-            _description_
+            Path to the file containing the project to open.
+        clear_stack_flag : logical
+            Flag to clear the stack of actions for the loaded project, by default False.
         """
 
         with open(project_path, "rb") as f:
@@ -151,6 +158,8 @@ class ProjectData:
             self.mask = state['mask']
             self.unit = state['unit']
             self.conversion_factors = state['conversion_factors']
+        if clear_stack_flag:
+            self.clear_stack()
         self.saved = True
 
 
@@ -255,6 +264,13 @@ class ProjectData:
         """
         if self.cursor_stack_action > 0:
             del self.stack_actions[self.cursor_stack_action+1:]
+            
+    def clear_stack(self):
+        """Claer the stack of actions.
+
+        """
+        self.cursor_stack_action = -1
+        self.stack_actions = []
 
     def crop_image(self, x1, y1, x2, y2):
         """Routine to crop an image using coordinates of opposite vertices of a rectangle.
@@ -409,6 +425,9 @@ class ProjectData:
         # Fine-tuning the thresholds in the cv2.Canny() function can help. 
         # Lower thresholds might detect more edges, while higher thresholds might reduce noise.
         edges = cv2.Canny(gray_image, edge_threshold1, edge_threshold2)
+        #cv2.imshow('image',image)
+        #cv2.imshow('edges',edges)
+        #cv2.waitKey(0)
         # Find contours
         # Experiment with different methods for contour retrieval (cv2.RETR_EXTERNAL, cv2.RETR_TREE, etc.) 
         # and approximation (cv2.CHAIN_APPROX_SIMPLE, cv2.CHAIN_APPROX_NONE).
@@ -1452,6 +1471,7 @@ class ImageViewer:
 
                         self.project.select_region_rgb((x, y), lower, upper, self.current_mask_color)
                     self.update_undo_redo()
+                    self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
             # Code to unpick a color
             elif self.status_tool == STATUS_TOOL_UNPICK_COLOR:
@@ -1527,6 +1547,7 @@ class ImageViewer:
 
                         self.project.select_color_rgb(lower, upper, COLOR_MASK_NONE)
                     self.update_undo_redo()
+                    self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
                     
     def on_motion(self, event):
@@ -1852,6 +1873,7 @@ class ImageViewer:
                 self.canvas.config(cursor="arrow")
                 self.status_label_message.config(text="")
                 self.canvas.unbind("<Button-1>")
+                self.status_tool = STATUS_TOOL_NONE
             else:
                 messagebox.showerror("Error", "No transition for the status for tools")
         elif new_status == STATUS_TOOL_CROP:
@@ -1967,7 +1989,7 @@ class ImageViewer:
             filetypes=[("Project File", "*.prj")]
         )
         if file_path:
-            self.project = ProjectData(project_path = file_path)
+            self.project = ProjectData(project_path = file_path, clear_stack_flag = True)
             if self.project.rgb is not None:
                 self.change_status(STATUS_IMAGE_LOADED)
                 self.zoom_level = 1.0
