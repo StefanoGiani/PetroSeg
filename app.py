@@ -10,7 +10,7 @@
 # - Side panel to report color values and coordinates of the cursor.
 # - Tools to pick and unpick colors to add and remove regions in the mask.
 # - Ruler to measure features on the image and to set conversion between pixels and real units.
-# - Automatic method to find inclusions based on edges and other criteria.
+# - Automatic method to find regions based on edges and other criteria.
 # - Select a connected region click with the mouse based on color similarity.
 
 # Shortcuts:
@@ -91,6 +91,8 @@ class ProjectData:
                                        "mask":self.mask.copy()})
             self.cursor_stack_action = 0
             self.project_file = None
+            self.unit = "px"
+            self.conversion_factors = {"px": 1.0, "cm": None, "mm": None, "in": None}
         elif project_path is not None:
             self.load(project_path)
         else:
@@ -102,6 +104,8 @@ class ProjectData:
             self.stack_actions = []
             self.cursor_stack_action = 0
             self.project_file = None
+            self.unit = "px"
+            self.conversion_factors = {"px": 1.0, "cm": None, "mm": None, "in": None}
 
     def save(self, project_path):
         """Routine to save the project to file.
@@ -121,6 +125,8 @@ class ProjectData:
             state['cursor_stack_action'] = self.cursor_stack_action
             state['project_file'] = project_path
             state['mask'] = self.mask
+            state['unit'] = self.unit
+            state['conversion_factors'] = self.conversion_factors
             self.project_file = project_path
             pickle.dump(state, f)
         self.saved = True
@@ -143,6 +149,8 @@ class ProjectData:
             self.cursor_stack_action = state['cursor_stack_action']
             self.project_file = state['project_file']
             self.mask = state['mask']
+            self.unit = state['unit']
+            self.conversion_factors = state['conversion_factors']
         self.saved = True
 
 
@@ -349,11 +357,11 @@ class ProjectData:
         else:
             return False
         
-    def find_inclusions(self, mask_color, range_color, color_encoding='RGB', edge_threshold1=100,
+    def find_regions(self, mask_color, range_color, color_encoding='RGB', edge_threshold1=100,
                         edge_threshold2=200, min_area=1, max_area=1000,
                         ratio_threshold=0.8, contour_retrieval=cv2.RETR_TREE,
                         approximation=cv2.CHAIN_APPROX_SIMPLE):
-        """Routine to automatically find inclusions using edges.
+        """Routine to automatically find regions using edges.
 
         Parameters
         ----------
@@ -373,7 +381,7 @@ class ProjectData:
         max_area : int, optional
             Maximum value for the area in pixels for an iclusion to be considered, by default 1000
         ratio_threshold : float, optional
-            Threshold for the ratio between area and hull area of inclusions. Inclusions above the threshold are cosidered, by default 0.8
+            Threshold for the ratio between area and hull area of regions. regions above the threshold are cosidered, by default 0.8
         contour_retrieval : cv2 constant, optional
             Specifies the hierarchy of contours to retrieve, by default cv2.RETR_TREE
             cv2.RETR_EXTERNAL: Retrieves only the outermost contours. Used when interested in the external shape of objects.
@@ -388,7 +396,7 @@ class ProjectData:
         Returns
         -------
         integer
-            Number of inclusions found.
+            Number of regions found.
         """
         
         self.truncate_stack()
@@ -442,7 +450,7 @@ class ProjectData:
         # Apply the color where mask == 255
         self.mask[mask_incusions != 0] = mask_color
         self.saved = False
-        self.stack_actions.append({"action": "FindInclusions(" + str(mask_color)  + 
+        self.stack_actions.append({"action": "FindRegions(" + str(mask_color)  + 
                                    "," + str(range_color)  + "," + str(color_encoding)  + 
                                    "," + str(edge_threshold1)  + "," + str(edge_threshold2)  + 
                                    "," + str(min_area)  + "," + str(max_area)  + 
@@ -616,8 +624,8 @@ class PickColorDialog(tk.Toplevel):
         self.callback(None, None)
         self.destroy()
         
-# Class for creating the dialog to set up the parameters for finding the inclusions
-class FindInclusionsDialog(tk.Toplevel):
+# Class for creating the dialog to set up the parameters for finding the regions
+class FindRegionsDialog(tk.Toplevel):
     def __init__(self, parent, callback, initial_values=None):
         """Constructor.
 
@@ -631,7 +639,7 @@ class FindInclusionsDialog(tk.Toplevel):
             Initialisation value for the parameters, by default None
         """
         super().__init__(parent)
-        self.title("Find Inclusions Dialogue")
+        self.title("Find Regions Dialogue")
         self.geometry("400x600")
         self.resizable(False, False)
         self.callback = callback
@@ -1005,8 +1013,8 @@ class ImageViewer:
             "mode": 'HSV'
         }
 
-        # Data for the find inclusions dialogue
-        self.find_inclusions_params = {
+        # Data for the find regions dialogue
+        self.find_regions_params = {
             'min H': 0,
             'min S': 0,
             'min V': 0,
@@ -1036,8 +1044,7 @@ class ImageViewer:
         self.final_line = None
         self.temp_text = None
         self.markers = []
-        self.unit = "px"
-        self.conversion_factors = {"px": 1.0, "cm": None, "mm": None, "in": None}
+        
 
         # Create the menu bar
         self.menu_bar = tk.Menu(root)
@@ -1076,7 +1083,7 @@ class ImageViewer:
         self.image_menu.add_command(label="Pick Color Dialog...", command=self.open_pick_color_dialog)
         self.image_menu.add_command(label="Pick Region Dialog...", command=self.open_pick_region_dialog)
         self.image_menu.add_command(label="Set Ruler...", command=self.open_set_ruler_dialog)
-        self.image_menu.add_command(label="Find Inclusions...", command=self.open_find_inclusions_dialog)
+        self.image_menu.add_command(label="Find Regions...", command=self.open_find_regions_dialog)
         self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
         # Mak Menu
         self.background_flag = tk.BooleanVar(value=False)
@@ -1101,9 +1108,10 @@ class ImageViewer:
         self.image_menu.entryconfig("Pick Color", state="disabled")
         self.image_menu.entryconfig("Unpick Color", state="disabled")
         self.image_menu.entryconfig("Pick Color Dialog...", state="disabled")
+        self.image_menu.entryconfig("Pick Region", state="disabled")
         self.image_menu.entryconfig("Pick Region Dialog...", state="disabled")
         self.image_menu.entryconfig("Set Ruler...", state="disabled")
-        self.image_menu.entryconfig("Find Inclusions...", state="disabled")
+        self.image_menu.entryconfig("Find Regions...", state="disabled")
         self.image_menu.entryconfig("Ruler", state="disabled")
         self.mask_menu.entryconfig("Background", state="disabled")
         self.mask_menu.entryconfig("Matrix", state="disabled")
@@ -1315,6 +1323,7 @@ class ImageViewer:
             self.project = ProjectData(image_path = file_path)
             self.change_status(STATUS_IMAGE_LOADED)
             self.zoom_level = 1.0
+            self.change_status_display(STATUS_DISPLAY_IMAGE)
             self.display_image()
             self.update_image_size_status(self.project.size)
             self.change_status_tool(STATUS_TOOL_NONE)
@@ -1347,6 +1356,9 @@ class ImageViewer:
         if self.status == STATUS_IMAGE_LOADED:
             # Code to pick a color
             if self.status_tool == STATUS_TOOL_PICK_COLOR:
+                if self.current_mask_color == COLOR_MASK_NONE:
+                    messagebox.showerror("Error", "No mask class selected.")
+                    return
                 x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
                 width, height = self.project.size
                 if 0 <= x < width and 0 <= y < height:
@@ -1419,9 +1431,13 @@ class ImageViewer:
 
                         self.project.select_color_rgb(lower, upper, self.current_mask_color)
                     self.update_undo_redo()
+                    self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
             # Code to pick a region
             elif self.status_tool == STATUS_TOOL_PICK_REGION:
+                if self.current_mask_color == COLOR_MASK_NONE:
+                    messagebox.showerror("Error", "No mask class selected.")
+                    return
                 x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
                 width, height = self.project.size
                 if 0 <= x < width and 0 <= y < height:
@@ -1578,6 +1594,8 @@ class ImageViewer:
                 self.canvas.delete("all") # Clear previous image
                 self.image_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
                 self.canvas.config(scrollregion=self.canvas.bbox(self.image_id))
+            else:
+                raise ValueError("display_status not supported")
 
     def on_mouse_press(self, event):
         """Routine to start creating the region to be used for cropping the image.
@@ -1714,9 +1732,10 @@ class ImageViewer:
                 self.image_menu.entryconfig("Unpick Color", state="normal")
                 self.image_menu.entryconfig("Export Image...", state="normal")
                 self.image_menu.entryconfig("Pick Color Dialog...", state="normal")
+                self.image_menu.entryconfig("Pick Region", state="normal")
                 self.image_menu.entryconfig("Pick Region Dialog...", state="normal")
                 self.image_menu.entryconfig("Set Ruler...", state="normal")
-                self.image_menu.entryconfig("Find Inclusions...", state="normal")
+                self.image_menu.entryconfig("Find Regions...", state="normal")
                 self.image_menu.entryconfig("Ruler", state="normal")
                 self.mask_menu.entryconfig("Background", state="normal")
                 self.mask_menu.entryconfig("Matrix", state="normal")
@@ -1751,23 +1770,38 @@ class ImageViewer:
 
     def crop_tool(self):
         """Routine to select the crop tool."""
-        self.change_status_tool(STATUS_TOOL_CROP)
+        if not self.crop_flag.get():
+            self.change_status_tool(STATUS_TOOL_NONE)
+        else:
+            self.change_status_tool(STATUS_TOOL_CROP)
 
     def pick_color_tool(self):
         """Routine to select the pick color tool."""
-        self.change_status_tool(STATUS_TOOL_PICK_COLOR)
+        if not self.pick_color_flag.get():
+            self.change_status_tool(STATUS_TOOL_NONE)
+        else:
+            self.change_status_tool(STATUS_TOOL_PICK_COLOR)
     
     def unpick_color_tool(self):
         """Routine to select the unpick color tool."""
-        self.change_status_tool(STATUS_TOOL_UNPICK_COLOR)
+        if not self.unpick_color_flag.get():
+            self.change_status_tool(STATUS_TOOL_NONE)
+        else:
+            self.change_status_tool(STATUS_TOOL_UNPICK_COLOR)
 
     def pick_region_tool(self):
         """Routine to select the pick region tool."""
-        self.change_status_tool(STATUS_TOOL_PICK_REGION)
+        if not self.pick_region_flag.get():
+            self.change_status_tool(STATUS_TOOL_NONE)
+        else:
+            self.change_status_tool(STATUS_TOOL_PICK_REGION)
 
     def ruler_tool(self):
         """Routine to select the ruler tool."""
-        self.change_status_tool(STATUS_TOOL_RULER)
+        if not self.ruler_flag.get():
+            self.change_status_tool(STATUS_TOOL_NONE)
+        else:
+            self.change_status_tool(STATUS_TOOL_RULER)
 
     def change_status_tool(self, new_status):
         """Routine to transition between stati for the app for tools.
@@ -1937,6 +1971,7 @@ class ImageViewer:
             if self.project.rgb is not None:
                 self.change_status(STATUS_IMAGE_LOADED)
                 self.zoom_level = 1.0
+                self.change_status_display(STATUS_DISPLAY_IMAGE)
                 self.display_image()
                 self.update_image_size_status(self.project.size)
 
@@ -2100,11 +2135,11 @@ class ImageViewer:
                                                       end_point[0], end_point[1], fill="blue", width=2)
             marker = self.canvas.create_oval(event.x-3, event.y-3, event.x+3, event.y+3, fill="red")
             self.markers.append(marker)
-            distance_px = math.hypot(end_point[0] - self.start_point[0], end_point[1] - self.start_point[1])
-            distance = distance_px * self.conversion_factors.get(self.unit, 1.0)
+            distance_px = math.hypot(int((end_point[0] - self.start_point[0]) / self.zoom_level), int((end_point[1] - self.start_point[1]) / self.zoom_level))
+            distance = distance_px * self.project.conversion_factors.get(self.project.unit, 1.0)
             self.temp_text = self.canvas.create_text((self.start_point[0] + end_point[0]) // 2,
                                                      (self.start_point[1] + end_point[1]) // 2,
-                                                     text=f"{distance:.2f} {self.unit}", fill="black")
+                                                     text=f"{distance:.2f} {self.project.unit}", fill="black")
             self.start_point = None
     
     def on_drag_ruler(self, event):
@@ -2123,10 +2158,10 @@ class ImageViewer:
             self.temp_line = self.canvas.create_line(self.start_point[0], self.start_point[1],
                                                      event.x, event.y, fill="gray", dash=(4, 2))
             distance_px = math.hypot(event.x - self.start_point[0], event.y - self.start_point[1])
-            distance = distance_px * self.conversion_factors.get(self.unit, 1.0)
+            distance = distance_px * self.project.conversion_factors.get(self.project.unit, 1.0)
             self.temp_text = self.canvas.create_text((self.start_point[0] + event.x) // 2,
                                                      (self.start_point[1] + event.y) // 2,
-                                                     text=f"{distance:.2f} {self.unit}", fill="gray")
+                                                     text=f"{distance:.2f} {self.project.unit}", fill="gray")
             
     def open_set_ruler_dialog(self):
         """Routine to open the dialog to calibrate the ruler."""
@@ -2136,25 +2171,27 @@ class ImageViewer:
         tk.Label(dialog, text="Distance in pixels:").grid(row=0, column=0, padx=5, pady=5)
         pixel_entry = tk.Entry(dialog)
         pixel_entry.grid(row=0, column=1, padx=5, pady=5)
-        pixel_entry.insert(0, str(self.conversion_factors["px"]))
+        pixel_entry.insert(0, str(self.project.conversion_factors["px"]))
 
         tk.Label(dialog, text="Real-world distance:").grid(row=1, column=0, padx=5, pady=5)
         real_entry = tk.Entry(dialog)
         real_entry.grid(row=1, column=1, padx=5, pady=5)
-        if self.unit != "px":
-            if self.conversion_factors[self.unit] is not None:
-                real_entry.insert(0, str(self.conversion_factors[self.unit]))
-
-        tk.Label(dialog, text="Unit:").grid(row=1, column=2, padx=5, pady=5)
-        if self.unit != "px":
-            unit_var = tk.StringVar(value=self.unit)
+        if self.project.unit != "px":
+            unit_var = tk.StringVar(value=self.project.unit)
         else:
             unit_var = tk.StringVar(value="cm")
+        if self.project.conversion_factors[unit_var.get()] is not None:
+            real_entry.insert(0, str(self.project.conversion_factors[unit_var.get()]))
+        else:
+            real_entry.insert(0, str(0.0))
+
+        tk.Label(dialog, text="Unit:").grid(row=1, column=2, padx=5, pady=5)
+       
         unit_menu = ttk.Combobox(dialog, textvariable=unit_var, values=["cm", "mm", "in"], state="readonly", width=5)
         unit_menu.grid(row=1, column=3, padx=5, pady=5)
 
         tk.Label(dialog, text="Display unit:").grid(row=2, column=0, padx=5, pady=5)
-        display_unit_var = tk.StringVar(value=self.unit)
+        display_unit_var = tk.StringVar(value=self.project.unit)
         for i, u in enumerate(["px", "cm", "mm", "in"]):
             tk.Radiobutton(dialog, text=u, variable=display_unit_var, value=u).grid(row=2, column=1+i, padx=2, pady=5)
 
@@ -2169,83 +2206,91 @@ class ImageViewer:
                     raise ValueError("Unit value must be non-negative")
                 unit = unit_var.get()
                 factor = real / px
-                self.conversion_factors["px"] = 1.0
-                self.conversion_factors["cm"] = factor if unit == "cm" else factor / 10 if unit == "mm" else factor * 2.54
-                self.conversion_factors["mm"] = self.conversion_factors["cm"] * 10
-                self.conversion_factors["in"] = self.conversion_factors["cm"] / 2.54
-                self.unit = display_unit_var.get()
+                self.project.conversion_factors["px"] = 1.0
+                self.project.conversion_factors["cm"] = factor if unit == "cm" else factor / 10 if unit == "mm" else factor * 2.54
+                self.project.conversion_factors["mm"] = self.project.conversion_factors["cm"] * 10
+                self.project.conversion_factors["in"] = self.project.conversion_factors["cm"] / 2.54
+                self.project.unit = display_unit_var.get()
+                self.project.saved = False
+                self.file_menu.entryconfig("Save Project", state="normal")
                 dialog.destroy()
             except ValueError:
                 messagebox.showerror("Error", "Please enter valid numbers.")
 
         tk.Button(dialog, text="Apply", command=apply_calibration).grid(row=3, column=0, columnspan=4, pady=10)
 
-    def open_find_inclusions_dialog(self):
-        """Routine to open the dialogue to automatically find inclusions."""
-        dialog = FindInclusionsDialog(self.root, self.find_inclusions_dialog_receive_values, self.find_inclusions_params)
+    def open_find_regions_dialog(self):
+        """Routine to open the dialogue to automatically find regions."""
+        if self.current_mask_color == COLOR_MASK_NONE:
+            messagebox.showerror("Error", "No mask class selected.")
+            return
+        dialog = FindRegionsDialog(self.root, self.find_regions_dialog_receive_values, self.find_regions_params)
         dialog.grab_set() # Make the dialog modal
         self.root.wait_window(dialog) # Wait until the dialog is closed
 
-    def find_inclusions_dialog_receive_values(self, values, mode):
-        """Routine to process the values from the dialogue to automatically find inclusions."""
+    def find_regions_dialog_receive_values(self, values, mode):
+        """Routine to process the values from the dialogue to automatically find regions."""
         if values is not None:
             if mode == 'HSV':
-                self.find_inclusions_params['mode'] = 'HSV'
-                self.find_inclusions_params['min H'] = values['min H']
-                self.find_inclusions_params['min S'] = values['min S']
-                self.find_inclusions_params['min V'] = values['min V']
-                self.find_inclusions_params['max H'] = values['max H']
-                self.find_inclusions_params['max S'] = values['max S']
-                self.find_inclusions_params['max V'] = values['max V']
+                self.find_regions_params['mode'] = 'HSV'
+                self.find_regions_params['min H'] = values['min H']
+                self.find_regions_params['min S'] = values['min S']
+                self.find_regions_params['min V'] = values['min V']
+                self.find_regions_params['max H'] = values['max H']
+                self.find_regions_params['max S'] = values['max S']
+                self.find_regions_params['max V'] = values['max V']
                 range_color = [[values['min H'], values['min S'], values['min V']],
                                [values['max H'], values['max S'], values['max V']]]
             else:
-                self.find_inclusions_params['mode'] = 'RGB'
-                self.find_inclusions_params['min R'] = values['min R']
-                self.find_inclusions_params['min G'] = values['min G']
-                self.find_inclusions_params['min B'] = values['min B']
-                self.find_inclusions_params['max R'] = values['max R']
-                self.find_inclusions_params['max G'] = values['max G']
-                self.find_inclusions_params['max B'] = values['max B']
+                self.find_regions_params['mode'] = 'RGB'
+                self.find_regions_params['min R'] = values['min R']
+                self.find_regions_params['min G'] = values['min G']
+                self.find_regions_params['min B'] = values['min B']
+                self.find_regions_params['max R'] = values['max R']
+                self.find_regions_params['max G'] = values['max G']
+                self.find_regions_params['max B'] = values['max B']
                 range_color = [[values['min R'], values['min G'], values['min B']],
                                [values['max R'], values['max G'], values['max B']]]
                 
-            self.find_inclusions_params['edge_threshold1'] = values['edge_min']
-            self.find_inclusions_params['edge_threshold2'] = values['edge_max']
-            self.find_inclusions_params['area_min'] = values['area_min']
-            self.find_inclusions_params['area_max'] = values['area_max']
-            self.find_inclusions_params['area_unit'] = values['area_unit']
-            self.find_inclusions_params['ratio_threshold'] = values['ratio_threshold']
+            self.find_regions_params['edge_threshold1'] = values['edge_min']
+            self.find_regions_params['edge_threshold2'] = values['edge_max']
+            self.find_regions_params['area_min'] = values['area_min']
+            self.find_regions_params['area_max'] = values['area_max']
+            self.find_regions_params['area_unit'] = values['area_unit']
+            self.find_regions_params['ratio_threshold'] = values['ratio_threshold']
 
-            if self.find_inclusions_params['area_unit'] == 'px':
-                self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min']
-                self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max']
-            elif self.find_inclusions_params['area_unit'] == "cm²":
-                if self.conversion_factors["cm"] is not None:
-                    self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min'] * self.conversion_factors["cm"]*self.conversion_factors["cm"]
-                    self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max'] * self.conversion_factors["cm"]*self.conversion_factors["cm"]
+            if self.find_regions_params['area_unit'] == 'px':
+                self.find_regions_params['area_min_px'] = self.find_regions_params['area_min']
+                self.find_regions_params['area_max_px'] = self.find_regions_params['area_max']
+            elif self.find_regions_params['area_unit'] == "cm²":
+                if self.project.conversion_factors["cm"] is not None:
+                    self.find_regions_params['area_min_px'] = self.find_regions_params['area_min'] * self.project.conversion_factors["cm"]*self.project.conversion_factors["cm"]
+                    self.find_regions_params['area_max_px'] = self.find_regions_params['area_max'] * self.project.conversion_factors["cm"]*self.project.conversion_factors["cm"]
                 else:
-                    messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_inclusions_params['area_unit']} is not set.")
+                    messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_regions_params['area_unit']} is not set.")
                     return
-            elif self.find_inclusions_params['area_unit'] == "mm²":
-                if self.conversion_factors["mm"] is not None:
-                    self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min'] * self.conversion_factors["mm"]*self.conversion_factors["mm"]
-                    self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max'] * self.conversion_factors["mm"]*self.conversion_factors["mm"]
+            elif self.find_regions_params['area_unit'] == "mm²":
+                if self.project.conversion_factors["mm"] is not None:
+                    self.find_regions_params['area_min_px'] = self.find_regions_params['area_min'] * self.project.conversion_factors["mm"]*self.project.conversion_factors["mm"]
+                    self.find_regions_params['area_max_px'] = self.find_regions_params['area_max'] * self.project.conversion_factors["mm"]*self.project.conversion_factors["mm"]
                 else:
-                    messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_inclusions_params['area_unit']} is not set.")
+                    messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_regions_params['area_unit']} is not set.")
                     return
-            elif self.find_inclusions_params['area_unit'] == "in²":
-                if self.conversion_factors["in"] is not None:
-                    self.find_inclusions_params['area_min_px'] = self.find_inclusions_params['area_min'] * self.conversion_factors["in"]*self.conversion_factors["in"]
-                    self.find_inclusions_params['area_max_px'] = self.find_inclusions_params['area_max'] * self.conversion_factors["in"]*self.conversion_factors["in"]
+            elif self.find_regions_params['area_unit'] == "in²":
+                if self.project.conversion_factors["in"] is not None:
+                    self.find_regions_params['area_min_px'] = self.find_regions_params['area_min'] * self.project.conversion_factors["in"]*self.project.conversion_factors["in"]
+                    self.find_regions_params['area_max_px'] = self.find_regions_params['area_max'] * self.project.conversion_factors["in"]*self.project.conversion_factors["in"]
                 else:
-                    messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_inclusions_params['area_unit']} is not set.")
+                    messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_regions_params['area_unit']} is not set.")
                     return
                 
-            self.project.find_inclusions(self.current_mask_color, range_color, self.find_inclusions_params['mode'], self.find_inclusions_params['edge_threshold1'],
-                        self.find_inclusions_params['edge_threshold2'], self.find_inclusions_params['area_min_px'], self.find_inclusions_params['area_max_px'],
-                        self.find_inclusions_params['ratio_threshold'] , contour_retrieval=cv2.RETR_TREE,
+            self.project.find_regions(self.current_mask_color, range_color, self.find_regions_params['mode'], self.find_regions_params['edge_threshold1'],
+                        self.find_regions_params['edge_threshold2'], self.find_regions_params['area_min_px'], self.find_regions_params['area_max_px'],
+                        self.find_regions_params['ratio_threshold'] , contour_retrieval=cv2.RETR_TREE,
                         approximation=cv2.CHAIN_APPROX_SIMPLE)
+            self.update_undo_redo()
+            self.file_menu.entryconfig("Save Project", state="normal")
+            self.display_image()
 
 
 # Run the app
