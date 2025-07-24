@@ -33,13 +33,20 @@ Image - Commands related to images.
 	Export Image... - Save the current image to disk.
 	Crop - Crop the current image.
 	Pick Color - Pick a color to add a region to the mask.
-	Pick REgion - Pick a region to add a region to the mask.
 	Unpick Color - Unpick a color to remove a region from the mask.
+	Pick Region - Pick a region to add a region to the mask.
+	Pick Color Range... - Dialogue to select rgions using color range.
 	Ruler - Virtual ruler.
 	Pick Color Dialogue... - Dialogue to set the parameters for the Pick Color tool.
 	Pick Region Dialogue... - Dialogue to set the parameters for the Pick Region tool.
 	Set Ruler... - Dialogue to set units and to convert between pixels and real units.
 	Find inclusions... - Dialogue to set the parameters to automatically find inclusions based on edge detection.
+	Show H Histogram - Histogram for the H channel.
+	Show S Histogram - Histogram for the S channel.
+	Show V Histogram - Histogram for the V channel.
+	Show R Histogram - Histogram for the R channel.
+	Show G Histogram - Histogram for the G channel.
+	Show B Histogram - Histogram for the B channel.
 
 Mask - Commands to select what to mark on the Mask
 	Background - Set to select the background region.
@@ -78,6 +85,8 @@ Ruler: Drag a virtual ruler to measure dimensions of features in images.
 Find inclusions: Automatically find inclusions based on edge detection.
 
 Pick Region: Click on the image to add to the mask a connected region based on color similarity.
+
+Pick Color Range: Select regions using color range.
 
 Keyboard Shortcutes:
 ----------------------

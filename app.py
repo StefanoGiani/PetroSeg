@@ -12,6 +12,8 @@
 # - Ruler to measure features on the image and to set conversion between pixels and real units.
 # - Automatic method to find regions based on edges and other criteria.
 # - Select a connected region click with the mouse based on color similarity.
+# - Select using color range.
+# - Show histograms of channels.
 
 # Shortcuts:
 # Ctrl+N New project and open an image.
@@ -30,6 +32,16 @@
 # 1. Very slow to work with images. Add timeglass animation when something is done.
 # 2. Try to speed up image processing for large images.
 # 3. When no tools are selected, click and drag to move image.
+# 4. In dialogue where units are used, only display units with not none conversion factor.
+# 5. Add possibility to select rectangular region.
+# 6. Add possibility to preview contours and other intermidiate steps in find regions.
+# 7. Check what happens when double clicked on mask class.
+# 8. Check mask for consistency, i.e. no COLOR_NONE pixels.
+
+# 9. Add splash window.
+# 10. Add about in memu.
+# 11. Consider to not reset history.
+# 12. Better debugging for history using window to display stack.
 
 # Author Stefano Giani
 
@@ -40,6 +52,7 @@ import pickle
 import cv2
 import numpy as np
 import math 
+import matplotlib.pyplot as plt
 
 # Stati of the app:
 STATUS_NONE = 0 # Just started 
@@ -94,11 +107,12 @@ class ProjectData:
             self.stack_actions = []
             self.stack_actions.append({"action": "LoadImage(" + image_path + ")", "saved": self.saved, "size": self.size, "rgb": self.rgb.copy(), "hsv": self.hsv.copy(), 
                                        "mask":self.mask.copy()})
-            self.cursor_stack_action = -1
+            self.cursor_stack_action = 0
             self.project_file = None
             self.unit = "px"
             self.conversion_factors = {"px": 1.0, "cm": None, "mm": None, "in": None}
         elif project_path is not None:
+            self.saved = True
             self.load(project_path, clear_stack_flag)
         else:
             self.rgb = None
@@ -107,10 +121,17 @@ class ProjectData:
             self.size = None
             self.saved = True
             self.stack_actions = []
-            self.cursor_stack_action = 0
+            self.cursor_stack_action = -1
             self.project_file = None
             self.unit = "px"
             self.conversion_factors = {"px": 1.0, "cm": None, "mm": None, "in": None}
+            
+    def snapshot(self):
+        """Take a snapshot of the current object."""
+        
+        self.stack_actions.append({"action": "Snapshot()", "saved": self.saved, "size": self.size, "rgb": self.rgb.copy(), "hsv": self.hsv.copy(), 
+                                       "mask":self.mask.copy()})
+        self.cursor_stack_action += 1
 
     def save(self, project_path):
         """Routine to save the project to file.
@@ -160,6 +181,7 @@ class ProjectData:
             self.conversion_factors = state['conversion_factors']
         if clear_stack_flag:
             self.clear_stack()
+            self.snapshot()
         self.saved = True
 
 
@@ -478,7 +500,38 @@ class ProjectData:
                                    "," + str(ratio_threshold)  + "," + str(contour_retrieval)  + 
                                    "," + str(approximation) + ")", "saved": self.saved, "mask": self.mask.copy()})
                                    
-        return inclusion_count                           
+        return inclusion_count   
+    
+    def color_range(self, mask_color, range_color, color_encoding='RGB'):
+        """Routine to select a range of colors.
+
+        Parameters
+        ----------
+        mask_color : tuple
+            Three uint8 values to determine the RGB color to use to mark the region on the mask.
+        range_color : list of two tuple
+            Two sets of three uint8 values each to determine the lower and upper values for the range in RGB/HSV.
+        color_encoding : str, optional
+            Type of color encoding used in range_color. Either RGB or HSV, by default 'RGB'
+        
+        """
+        
+        self.truncate_stack()
+        self.cursor_stack_action = len(self.stack_actions)
+        
+        if color_encoding=='RGB':
+            image = np.array(self.rgb)
+            mask = cv2.inRange(image, np.asarray(range_color[0]), np.asarray(range_color[1])) 
+        else: # HSV
+            mask = cv2.inRange(self.hsv, np.asarray(range_color[0]), np.asarray(range_color[1])) 
+            
+        # Apply the color where mask == 255
+        self.mask[mask != 0] = mask_color
+        self.saved = False
+        self.stack_actions.append({"action": "ColorRange(" + str(mask_color)  + 
+                                   "," + str(range_color)  + "," + str(color_encoding) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        
+              
         
 
 # Class for creating the dialog to set up the parameters for the tool pick color
@@ -976,7 +1029,222 @@ class FindRegionsDialog(tk.Toplevel):
         
 
 
-       
+# Class for creating the dialog to select a range of colours
+class ColorRangeDialog(tk.Toplevel):
+    def __init__(self, parent, callback, initial_values=None):
+        """Constructor.
+
+        Parameters
+        ----------
+        parent : TK class
+            Parent object.
+        callback : function
+            Routine to call to return parameter values to the caller.
+        initial_values : dictionary, optional
+            Initialisation value for the parameters, by default None
+        """
+        super().__init__(parent)
+        self.title("Color Range Dialogue")
+        self.geometry("400x600")
+        self.resizable(False, False)
+        self.callback = callback
+
+        # Parameter names and range
+        self.params = {
+            'min H': {'value': 0, 'min': 0, 'max': 179},
+            'min S': {'value': 0, 'min': 0, 'max': 255},
+            'min V': {'value': 0, 'min': 0, 'max': 255},
+            'min R': {'value': 0, 'min': 0, 'max': 255},
+            'min G': {'value': 0, 'min': 0, 'max': 255},
+            'min B': {'value': 0, 'min': 0, 'max': 255},
+            'max H': {'value': 0, 'min': 0, 'max': 179},
+            'max S': {'value': 0, 'min': 0, 'max': 255},
+            'max V': {'value': 0, 'min': 0, 'max': 255},
+            'max R': {'value': 0, 'min': 0, 'max': 255},
+            'max G': {'value': 0, 'min': 0, 'max': 255},
+            'max B': {'value': 0, 'min': 0, 'max': 255}
+        }
+
+        
+        
+        self.mode = tk.StringVar(value='HSV')
+        # Override with initial values if provided
+        if initial_values:
+            for key in self.params:
+                if key in initial_values:
+                    self.params[key]['value'] = initial_values[key]
+            if 'mode' in initial_values:
+                self.mode = tk.StringVar(value=initial_values['mode'])
+            
+
+        self.entries = {}
+        self.buttons = {}
+        
+        # Create a canvas and a vertical scrollbar for scrolling
+        container = ttk.Frame(self)
+        container.pack(fill='both', expand=True)
+
+        canvas = tk.Canvas(container, borderwidth=0, height=350)
+        self.frame = ttk.Frame(canvas)
+
+
+        canvas.create_window((0, 0), window=self.frame, anchor="nw")
+
+
+
+        canvas.pack(side="left", fill="both", expand=True)
+
+        
+        self.create_widgets()
+
+    def create_widgets(self):
+        """Routine to create the dialogue.
+        """
+
+        # Radio buttons
+        mode_frame = ttk.LabelFrame(self.frame, text="Mode")
+        mode_frame.pack(pady=10)
+
+        hsv_radio = ttk.Radiobutton(mode_frame, text="HSV", variable=self.mode, value="HSV", command=self.update_mode)
+        rgb_radio = ttk.Radiobutton(mode_frame, text="RGB", variable=self.mode, value="RGB", command=self.update_mode)
+        hsv_radio.grid(row=0, column=0, padx=10)
+        rgb_radio.grid(row=0, column=1, padx=10)
+
+        # Frame to hold both HSV and RGB columns
+        dual_column_frame = ttk.Frame(self.frame)
+        dual_column_frame.pack(pady=10)
+
+        # HSV column
+        hsv_column = ttk.Frame(dual_column_frame)
+        hsv_column.grid(row=0, column=0, padx=(0, 0))
+        for param in ['min H', 'max H', 'min S', 'max S', 'min V', 'max V']:
+            frame = ttk.Frame(hsv_column)
+            frame.pack(pady=5)
+
+            label = ttk.Label(frame, text=param)
+
+            label.grid(row=0, column=0, padx=5)
+
+            minus_btn = ttk.Button(frame, text="-", width=3,
+                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn.grid(row=0, column=1)
+
+            entry = ttk.Entry(frame, width=5, justify='center')
+            entry.insert(0, str(self.params[param]['value']))
+            entry.grid(row=0, column=2)
+
+            plus_btn = ttk.Button(frame, text="+", width=3,
+                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn.grid(row=0, column=3)
+
+            self.entries[param] = entry
+            self.buttons[param] = (minus_btn, plus_btn)
+            
+        # Vertical separator
+        ttk.Separator(dual_column_frame, orient='vertical').grid(row=0, column=1, sticky='ns', padx=5)
+        
+        # RGB column
+        rgb_column = ttk.Frame(dual_column_frame)
+        rgb_column.grid(row=0, column=2, padx=(10, 0))
+        for param in ['min R', 'max R', 'min G', 'max G', 'min B', 'max B']:
+            frame = ttk.Frame(rgb_column)
+            frame.pack(pady=5)
+
+            label = ttk.Label(frame, text=param)
+
+            label.grid(row=0, column=0, padx=5)
+
+            minus_btn = ttk.Button(frame, text="-", width=3,
+                                   command=lambda p=param: self.update_value(p, -1))
+            minus_btn.grid(row=0, column=1)
+
+            entry = ttk.Entry(frame, width=5, justify='center')
+            entry.insert(0, str(self.params[param]['value']))
+            entry.grid(row=0, column=2)
+
+            plus_btn = ttk.Button(frame, text="+", width=3,
+                                  command=lambda p=param: self.update_value(p, 1))
+            plus_btn.grid(row=0, column=3)
+
+            self.entries[param] = entry
+            self.buttons[param] = (minus_btn, plus_btn)
+
+        self.update_mode()  # Set initial state
+        
+        
+
+        
+        # Submit and Cancel buttons
+        btn_frame = ttk.Frame(self.frame)
+        btn_frame.pack(pady=15)
+
+        submit_btn = ttk.Button(btn_frame, text="Submit", command=self.submit)
+        submit_btn.grid(row=0, column=0, padx=10)
+
+        cancel_btn = ttk.Button(btn_frame, text="Cancel", command=self.cancel)
+        cancel_btn.grid(row=0, column=1, padx=10)
+
+    def update_mode(self):
+        """Routine to select between HSV and RGB.
+        """
+        mode = self.mode.get()
+        for param in self.params:
+            active = (mode == "HSV" and param in ('min H', 'max H', 'min S', 'max S', 'min V', 'max V')) or (mode == "RGB" and param in ('min R', 'max R', 'min G', 'max G', 'min B', 'max B'))
+            state = "normal" if active else "disabled"
+            self.entries[param].config(state=state)
+            for btn in self.buttons[param]:
+                btn.config(state=state)
+
+    def update_value(self, param, delta):
+        """Routine to update the value of the parameters using the buttons."""
+        try:
+            current = int(self.entries[param].get())
+        except ValueError:
+            current = self.params[param]['min']
+        new_val = max(self.params[param]['min'], min(self.params[param]['max'], current + delta))
+        self.entries[param].delete(0, tk.END)
+        self.entries[param].insert(0, str(new_val))
+
+    def submit(self):
+        """Routine to submit the changes."""
+        values = {}
+        for param in self.params:
+            try:
+                val = int(self.entries[param].get())
+                if self.params[param]['min'] <= val <= self.params[param]['max']:
+                    values[param] = val
+                else:
+                    messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
+                    return
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
+                return
+        for param in ['H', 'S', 'V', 'R', 'G', 'B']:
+            try:
+                val = int(self.entries['min ' + param].get())
+                
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {'min ' + param}")
+                return
+            try:
+                val = int(self.entries['max ' + param].get())
+                
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {'max ' + param}")
+                return
+            if self.params['min ' + param]['value'] > self.params['max ' + param]['value']:
+                messagebox.showerror("Invalid Input", f"The minimum value for {param} cannot be greater than the maximum value for {param}")
+                return
+        
+
+        selected_mode = self.mode.get()
+        self.callback(values, selected_mode)  # Pass both values and mode
+        self.destroy()
+        
+    def cancel(self):
+        """Routine to cancel the dialogue."""
+        self.callback(None, None)
+        self.destroy()        
         
 # Class implementing the app
 class ImageViewer:
@@ -1059,6 +1327,23 @@ class ImageViewer:
             'ratio_threshold': 0.8
         }
         
+        # Data for the color range dialogue
+        self.color_range_params = {
+            'min H': 0,
+            'min S': 0,
+            'min V': 0,
+            'min R': 0,
+            'min G': 0,
+            'min B': 0,
+            'max H': 0,
+            'max S': 0,
+            'max V': 0,
+            'max R': 0,
+            'max G': 0,
+            'max B': 0,
+            "mode": 'HSV'
+        }
+        
         # Variables for the ruler
         self.start_point = None
         self.temp_line = None
@@ -1099,12 +1384,20 @@ class ImageViewer:
         self.image_menu.add_checkbutton(label="Pick Color", command=self.pick_color_tool, variable=self.pick_color_flag)
         self.image_menu.add_checkbutton(label="Unpick Color", command=self.unpick_color_tool, variable=self.unpick_color_flag)
         self.image_menu.add_checkbutton(label="Pick Region", command=self.pick_region_tool, variable=self.pick_region_flag)
+        self.image_menu.add_command(label="Pick Color Range...", command=self.open_color_range_dialog)
         self.image_menu.add_checkbutton(label="Ruler", command=self.ruler_tool, variable=self.ruler_flag)
         self.image_menu.add_separator()
         self.image_menu.add_command(label="Pick Color Dialog...", command=self.open_pick_color_dialog)
         self.image_menu.add_command(label="Pick Region Dialog...", command=self.open_pick_region_dialog)
         self.image_menu.add_command(label="Set Ruler...", command=self.open_set_ruler_dialog)
         self.image_menu.add_command(label="Find Regions...", command=self.open_find_regions_dialog)
+        self.image_menu.add_separator()
+        self.image_menu.add_command(label="Show H Histogram", command=self.show_h_histogram)
+        self.image_menu.add_command(label="Show S Histogram", command=self.show_s_histogram)
+        self.image_menu.add_command(label="Show V Histogram", command=self.show_v_histogram)
+        self.image_menu.add_command(label="Show R Histogram", command=self.show_r_histogram)
+        self.image_menu.add_command(label="Show G Histogram", command=self.show_g_histogram)
+        self.image_menu.add_command(label="Show B Histogram", command=self.show_b_histogram)
         self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
         # Mak Menu
         self.background_flag = tk.BooleanVar(value=False)
@@ -1131,9 +1424,16 @@ class ImageViewer:
         self.image_menu.entryconfig("Pick Color Dialog...", state="disabled")
         self.image_menu.entryconfig("Pick Region", state="disabled")
         self.image_menu.entryconfig("Pick Region Dialog...", state="disabled")
+        self.image_menu.entryconfig("Pick Color Range...", state="disabled")
         self.image_menu.entryconfig("Set Ruler...", state="disabled")
         self.image_menu.entryconfig("Find Regions...", state="disabled")
         self.image_menu.entryconfig("Ruler", state="disabled")
+        self.image_menu.entryconfig("Show H Histogram", state="disabled")
+        self.image_menu.entryconfig("Show S Histogram", state="disabled")
+        self.image_menu.entryconfig("Show V Histogram", state="disabled")
+        self.image_menu.entryconfig("Show R Histogram", state="disabled")
+        self.image_menu.entryconfig("Show G Histogram", state="disabled")
+        self.image_menu.entryconfig("Show B Histogram", state="disabled")
         self.mask_menu.entryconfig("Background", state="disabled")
         self.mask_menu.entryconfig("Matrix", state="disabled")
         self.mask_menu.entryconfig("Inclusion", state="disabled")
@@ -1380,7 +1680,9 @@ class ImageViewer:
                 if self.current_mask_color == COLOR_MASK_NONE:
                     messagebox.showerror("Error", "No mask class selected.")
                     return
-                x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
+                canvas_x = self.canvas.canvasx(event.x)
+                canvas_y = self.canvas.canvasy(event.y)
+                x, y = int(canvas_x / self.zoom_level), int(canvas_y / self.zoom_level)
                 width, height = self.project.size
                 if 0 <= x < width and 0 <= y < height:
                     if self.pick_color_params['mode'] == 'HSV':
@@ -1459,7 +1761,9 @@ class ImageViewer:
                 if self.current_mask_color == COLOR_MASK_NONE:
                     messagebox.showerror("Error", "No mask class selected.")
                     return
-                x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
+                canvas_x = self.canvas.canvasx(event.x)
+                canvas_y = self.canvas.canvasy(event.y)
+                x, y = int(canvas_x / self.zoom_level), int(canvas_y / self.zoom_level)
                 width, height = self.project.size
                 if 0 <= x < width and 0 <= y < height:
                     if self.pick_region_params['mode'] == 'HSV':
@@ -1477,7 +1781,9 @@ class ImageViewer:
                     self.display_image()
             # Code to unpick a color
             elif self.status_tool == STATUS_TOOL_UNPICK_COLOR:
-                x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
+                canvas_x = self.canvas.canvasx(event.x)
+                canvas_y = self.canvas.canvasy(event.y)
+                x, y = int(canvas_x / self.zoom_level), int(canvas_y / self.zoom_level)
                 width, height = self.project.size
                 if 0 <= x < width and 0 <= y < height:
                     if self.pick_color_params['mode'] == 'HSV':
@@ -1563,7 +1869,9 @@ class ImageViewer:
     def show_info(self, event):
         """Routine to update the info on the left panel"""
         if self.status == STATUS_IMAGE_LOADED:
-            x, y = int(event.x / self.zoom_level), int(event.y / self.zoom_level)
+            canvas_x = self.canvas.canvasx(event.x)
+            canvas_y = self.canvas.canvasy(event.y)
+            x, y = int(canvas_x / self.zoom_level), int(canvas_y / self.zoom_level)
             width, height = self.project.size
             if 0 <= x < width and 0 <= y < height:
                 r, g, b = self.project.rgb.getpixel((x, y))
@@ -1757,9 +2065,16 @@ class ImageViewer:
                 self.image_menu.entryconfig("Pick Color Dialog...", state="normal")
                 self.image_menu.entryconfig("Pick Region", state="normal")
                 self.image_menu.entryconfig("Pick Region Dialog...", state="normal")
+                self.image_menu.entryconfig("Pick Color Range...", state="normal")
                 self.image_menu.entryconfig("Set Ruler...", state="normal")
                 self.image_menu.entryconfig("Find Regions...", state="normal")
                 self.image_menu.entryconfig("Ruler", state="normal")
+                self.image_menu.entryconfig("Show H Histogram", state="normal")
+                self.image_menu.entryconfig("Show S Histogram", state="normal")
+                self.image_menu.entryconfig("Show V Histogram", state="normal")
+                self.image_menu.entryconfig("Show R Histogram", state="normal")
+                self.image_menu.entryconfig("Show G Histogram", state="normal")
+                self.image_menu.entryconfig("Show B Histogram", state="normal")
                 self.mask_menu.entryconfig("Background", state="normal")
                 self.mask_menu.entryconfig("Matrix", state="normal")
                 self.mask_menu.entryconfig("Inclusion", state="normal")
@@ -2316,6 +2631,127 @@ class ImageViewer:
             self.file_menu.entryconfig("Save Project", state="normal")
             self.display_image()
 
+    def show_histogram(self, channel_index, mode='RGB'):
+        """Routine to show the histogram of one of the channels.
+
+        Parameters
+        ----------
+        channel_index : integer
+            Channel to display.
+        mode : str, optional
+            Mode to use between HSV and RGB, by default 'RGB'
+        """
+        if self.status == STATUS_IMAGE_LOADED:
+            if mode=='RGB':
+                img_tmp = np.array(self.project.rgb)
+                if channel_index == 0:
+                    color = "red"
+                    title = "Red Histogram"
+                elif channel_index == 1:
+                    color = "green"
+                    title = "Green Histogram"
+                elif channel_index == 2:
+                    color = "blue"
+                    title = "Blue Histogram"
+                else:
+                    messagebox.showwarning("Error", "Channel not recognised.")
+                    return
+                channel = img_tmp[:, :, channel_index]
+                plt.figure()
+                plt.hist(channel.ravel(), bins=256, range=(0, 256), color=color)
+                plt.title(title)
+                plt.xlabel("Value")
+                plt.ylabel("Frequency")
+                plt.grid(True)
+                plt.show()
+            elif mode=='HSV':
+                if channel_index == 0:
+                    color = "purple"
+                    title = "Hue Histogram"
+                    max_value = 180
+                elif channel_index == 1:
+                    color = "gray"
+                    title = "Saturation Histogram"
+                    max_value = 256
+                elif channel_index == 2:
+                    color = "yellow"
+                    title = "Value Histogram"
+                    max_value = 256
+                else:
+                    messagebox.showwarning("Error", "Channel not recognised.")
+                    return
+                channel = self.project.hsv[:, :, channel_index]
+                plt.figure()
+                plt.hist(channel.ravel(), bins=max_value, range=(0, max_value), color=color)
+                plt.title(title)
+                plt.xlabel("Value")
+                plt.ylabel("Frequency")
+                plt.grid(True)
+                plt.show()
+            else:
+                messagebox.showwarning("Error", "Mode not recognised.")
+                return
+    def show_h_histogram(self):
+        """Routine to show the H histogram"""
+        self.show_histogram(0, "HSV")
+
+    def show_s_histogram(self):
+        """Routine to show the S histogram"""
+        self.show_histogram(1, "HSV")
+
+    def show_v_histogram(self):
+        """Routine to show the V histogram"""
+        self.show_histogram(2, "HSV")
+        
+    def show_r_histogram(self):
+        """Routine to show the R histogram"""
+        self.show_histogram(0, "RGB")
+
+    def show_g_histogram(self):
+        """Routine to show the G histogram"""
+        self.show_histogram(1, "RGB")
+
+    def show_b_histogram(self):
+        """Routine to show the B histogram"""
+        self.show_histogram(2, "RGB")
+        
+    def open_color_range_dialog(self):
+        """Routine to open the dialogue to select color range."""
+        if self.current_mask_color == COLOR_MASK_NONE:
+            messagebox.showerror("Error", "No mask class selected.")
+            return
+        dialog = ColorRangeDialog(self.root, self.color_range_dialog_receive_values, self.color_range_params)
+        dialog.grab_set() # Make the dialog modal
+        self.root.wait_window(dialog) # Wait until the dialog is closed
+
+    def color_range_dialog_receive_values(self, values, mode):
+        """Routine to process the values from the dialogue to select color range."""
+        if values is not None:
+            if mode == 'HSV':
+                self.color_range_params['mode'] = 'HSV'
+                self.color_range_params['min H'] = values['min H']
+                self.color_range_params['min S'] = values['min S']
+                self.color_range_params['min V'] = values['min V']
+                self.color_range_params['max H'] = values['max H']
+                self.color_range_params['max S'] = values['max S']
+                self.color_range_params['max V'] = values['max V']
+                range_color = [[values['min H'], values['min S'], values['min V']],
+                               [values['max H'], values['max S'], values['max V']]]
+            else:
+                self.color_range_params['mode'] = 'RGB'
+                self.color_range_params['min R'] = values['min R']
+                self.color_range_params['min G'] = values['min G']
+                self.color_range_params['min B'] = values['min B']
+                self.color_range_params['max R'] = values['max R']
+                self.color_range_params['max G'] = values['max G']
+                self.color_range_params['max B'] = values['max B']
+                range_color = [[values['min R'], values['min G'], values['min B']],
+                               [values['max R'], values['max G'], values['max B']]]
+                
+            self.project.color_range(self.current_mask_color, range_color, self.color_range_params['mode'])
+            self.update_undo_redo()
+            self.file_menu.entryconfig("Save Project", state="normal")
+            self.display_image()
 
 # Run the app
 root = tk.Tk()
