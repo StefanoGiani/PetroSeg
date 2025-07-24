@@ -225,6 +225,9 @@ class ProjectData:
         
     def select_region_hsv(self, point, lower, upper, color):
         """Select a connected region in the mask using HSV.
+        The floofill routine in cv2 accepts only RGB images, not HSV.
+        Therefore I have to do a workaround by selecting a color range in HSV first,
+        and then find the connected region with the selected point.
         
         Parameters
         ----------
@@ -238,13 +241,35 @@ class ProjectData:
             Three uint8 values to determine the RGB color to use to mark the region on the mask."""
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
-        mask_floodfill = np.zeros((self.hsv.shape[0]+2, self.hsv.shape[1]+2), np.uint8)
-        # I have to create a copy becuase cv2.floodFill update the image as well
-        hsv_tmp = self.hsv.copy()
-        cv2.floodFill(hsv_tmp, mask_floodfill, point, (0, 0, 255),
-                      loDiff=lower, upDiff=upper, flags=4)
-        filled_region = mask_floodfill[1:-1, 1:-1]
-
+        color_tmp = self.hsv[point[1],point[0],:]
+        color_lower = color_tmp - lower
+        color_upper = color_tmp + upper
+        if color_lower[0]<0:
+            color_lower[0] = 0
+        if color_lower[1]<0:
+            color_lower[1] = 0
+        if color_lower[2]<0:
+            color_lower[2] = 0
+        if color_upper[0]>179:
+            color_upper[0] = 179
+        if color_upper[1]>255:
+            color_upper[1] = 255
+        if color_upper[2]>255:
+            color_upper[2] = 255
+        mask = cv2.inRange(self.hsv, color_lower, color_upper)
+        
+        # Create a mask for floodFill (must be 2 pixels larger)
+        flood_mask = np.zeros((self.size[1]+2, self.size[0]+2), np.uint8)
+        
+        
+        mask_rgb = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        
+        # Flood fill with a temporary color
+        cv2.floodFill(mask_rgb, flood_mask, point, (255,255,255),
+                      loDiff=(0,0,0), upDiff=(0,0,0), flags=4)
+        
+        filled_region = flood_mask[1:-1, 1:-1]
+        
         # Create a boolean mask for the condition
         condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (filled_region != 0)
 
@@ -267,8 +292,8 @@ class ProjectData:
             Three uint8 values to determine the RGB color to use to mark the region on the mask."""
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
-        mask_floodfill = np.zeros((self.hsv.shape[0]+2, self.hsv.shape[1]+2), np.uint8)
-        cv2.floodFill(np.array(self.rgb), mask_floodfill, point, color,
+        mask_floodfill = np.zeros((self.size[1]+2, self.size[0]+2), np.uint8)
+        cv2.floodFill(np.array(self.rgb), mask_floodfill, point, (255,255,255),
                       loDiff=lower, upDiff=upper, flags=4)
         filled_region = mask_floodfill[1:-1, 1:-1]
         
@@ -400,7 +425,7 @@ class ProjectData:
     def find_regions(self, mask_color, range_color, color_encoding='RGB', edge_threshold1=100,
                         edge_threshold2=200, min_area=1, max_area=1000,
                         ratio_threshold=0.8, contour_retrieval=cv2.RETR_TREE,
-                        approximation=cv2.CHAIN_APPROX_SIMPLE):
+                        approximation=cv2.CHAIN_APPROX_SIMPLE, preview=None):
         """Routine to automatically find regions using edges.
 
         Parameters
@@ -432,35 +457,51 @@ class ProjectData:
             Specifies how the contour points are stored:, by default cv2.CHAIN_APPROX_SIMPLE
             cv2.CHAIN_APPROX_NONE: Stores all the boundary points. This can be memory-intensive.
             cv2.CHAIN_APPROX_SIMPLE: Compresses horizontal, vertical, and diagonal segments and keeps only their end points. This is more efficient and commonly used.
+        preview : string, optional
+            Specify if the user wants just a preview of one of the itnermediate steps or run the algorithm, by default None:
+            None: Full algorithm
+            "edges" : mask with edges returned.
+            "colors" : return mask of selected colors.
 
         Returns
         -------
         integer
-            Number of regions found.
+            Number of regions found if the full algorithm is run.
+        mask
+            if a preview is selected.
         """
         
-        self.truncate_stack()
-        self.cursor_stack_action = len(self.stack_actions)
+        if preview is None:
+            self.truncate_stack()
+            self.cursor_stack_action = len(self.stack_actions)
         
         # Convert image to greyscale
         image = np.array(self.rgb)
-        gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        # Apply edge detection
-        # Fine-tuning the thresholds in the cv2.Canny() function can help. 
-        # Lower thresholds might detect more edges, while higher thresholds might reduce noise.
-        edges = cv2.Canny(gray_image, edge_threshold1, edge_threshold2)
-        #cv2.imshow('image',image)
-        #cv2.imshow('edges',edges)
-        #cv2.waitKey(0)
+        if (preview == "edges") or (preview is None):
+            gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            # Apply edge detection
+            # Fine-tuning the thresholds in the cv2.Canny() function can help. 
+            # Lower thresholds might detect more edges, while higher thresholds might reduce noise.
+            edges = cv2.Canny(gray_image, edge_threshold1, edge_threshold2)
+            #cv2.imshow('image',image)
+            #cv2.imshow('edges',edges)
+            #cv2.waitKey(0)
+        if preview == "edges":
+            return edges
+        
+        if (preview == "colors") or (preview is None):
+            # Create mask
+            if color_encoding=='RGB':
+                mask = cv2.inRange(image, np.asarray(range_color[0]), np.asarray(range_color[1])) 
+            else: # HSV
+                mask = cv2.inRange(self.hsv, np.asarray(range_color[0]), np.asarray(range_color[1])) 
+        if preview == "colors":
+            return mask
+
         # Find contours
         # Experiment with different methods for contour retrieval (cv2.RETR_EXTERNAL, cv2.RETR_TREE, etc.) 
         # and approximation (cv2.CHAIN_APPROX_SIMPLE, cv2.CHAIN_APPROX_NONE).
         contours, _ = cv2.findContours(edges, contour_retrieval, approximation)
-        # Create mask
-        if color_encoding=='RGB':
-            mask = cv2.inRange(image, np.asarray(range_color[0]), np.asarray(range_color[1])) 
-        else: # HSV
-            mask = cv2.inRange(self.hsv, np.asarray(range_color[0]), np.asarray(range_color[1])) 
 
         # Combine Contours and color masks
         filtered_contours = []
@@ -700,7 +741,7 @@ class PickColorDialog(tk.Toplevel):
         
 # Class for creating the dialog to set up the parameters for finding the regions
 class FindRegionsDialog(tk.Toplevel):
-    def __init__(self, parent, callback, initial_values=None):
+    def __init__(self, parent, callback, project_data, initial_values=None):
         """Constructor.
 
         Parameters
@@ -709,6 +750,8 @@ class FindRegionsDialog(tk.Toplevel):
             Parent object.
         callback : function
             Routine to call to return parameter values to the caller.
+        project_data : object
+            Project data object.
         initial_values : dictionary, optional
             Initialisation value for the parameters, by default None
         """
@@ -717,6 +760,7 @@ class FindRegionsDialog(tk.Toplevel):
         self.geometry("400x600")
         self.resizable(False, False)
         self.callback = callback
+        self.project_data = project_data
 
         # Parameter names and range
         self.params = {
@@ -805,6 +849,9 @@ class FindRegionsDialog(tk.Toplevel):
 
         max_entry = ttk.Entry(edge_frame, textvariable=self.edge_max, width=6, justify='center')
         max_entry.grid(row=0, column=3, padx=5)
+        
+        preview_edge_btn = ttk.Button(edge_frame, text="Preview", command=self.preview_edge)
+        preview_edge_btn.grid(row=0, column=4, padx=5)
         
         # Area thresholds section
         area_frame = ttk.LabelFrame(self.frame, text="Area thresholds")
@@ -907,6 +954,9 @@ class FindRegionsDialog(tk.Toplevel):
 
             self.entries[param] = entry
             self.buttons[param] = (minus_btn, plus_btn)
+            
+        preview_colors_btn = ttk.Button(dual_column_frame, text="Preview", command=self.preview_colors)
+        preview_colors_btn.grid(row=1, column=1, padx=5)
 
         self.update_mode()  # Set initial state
         
@@ -943,7 +993,7 @@ class FindRegionsDialog(tk.Toplevel):
         new_val = max(self.params[param]['min'], min(self.params[param]['max'], current + delta))
         self.entries[param].delete(0, tk.END)
         self.entries[param].insert(0, str(new_val))
-
+        
     def submit(self):
         """Routine to submit the changes."""
         values = {}
@@ -1021,11 +1071,105 @@ class FindRegionsDialog(tk.Toplevel):
         selected_mode = self.mode.get()
         self.callback(values, selected_mode)  # Pass both values and mode
         self.destroy()
+
+    def validate(self):
+        """Routine to validate inputs.
+        
+         Returns
+        -------
+        logical
+            Check if inputs are fine.
+        """
+        for param in self.params:
+            try:
+                val = int(self.entries[param].get())
+                if not(self.params[param]['min'] <= val <= self.params[param]['max']):
+                    messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
+                    return 1
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {param} between {self.params[param]['min']} and {self.params[param]['max']}")
+                return False
+        for param in ['H', 'S', 'V', 'R', 'G', 'B']:
+            try:
+                val = int(self.entries['min ' + param].get())
+                
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {'min ' + param}")
+                return False
+            try:
+                val = int(self.entries['max ' + param].get())
+                
+            except ValueError:
+                messagebox.showerror("Invalid Input", f"Please enter a valid value for {'max ' + param}")
+                return False
+            if self.params['min ' + param]['value'] > self.params['max ' + param]['value']:
+                messagebox.showerror("Invalid Input", f"The minimum value for {param} cannot be greater than the maximum value for {param}")
+                return False
+        try:
+            val = int(self.edge_min.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the minimum threshold value for edges")
+            return False
+        try:
+            val = int(self.edge_max.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the maximum threshold value for edges")
+            return False
+        if self.edge_min.get() > self.edge_max.get():
+                messagebox.showerror("Invalid Input", f"The minimum threshold value for edges cannot be greater than the maximum threshold value")
+                return False
+        try:
+            val = int(self.area_min.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the minimum area")
+            return False
+        try:
+            val = int(self.area_max.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the maximum area")
+            return False
+        if self.area_min.get() > self.area_max.get():
+                messagebox.showerror("Invalid Input", f"The minimum area value cannot be greater than the maximum area value")
+                return False
+        
+        try:
+            val = float(self.ratio_threshold.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", f"Please enter a valid value for the ratio threshold")
+            return False
+        return True
+        
         
     def cancel(self):
         """Routine to cancel the dialogue."""
         self.callback(None, None)
         self.destroy() 
+        
+    def preview_edge(self):
+        """Routine to preview the detected edges."""
+        
+        if self.validate(): 
+            edges = self.project_data.find_regions(None, None, "RGB", self.edge_min.get(),
+                        self.edge_max.get(), None, None,
+                        None , preview="edges")
+            cv2.imshow('edges',edges)
+            cv2.waitKey(0)
+            
+    def preview_colors(self):
+        """Routine to preview the selected colors."""
+        
+        if self.validate(): 
+            if self.mode.get() == 'HSV':
+                range_color = [[int(self.entries['min H'].get()), int(self.entries['min S'].get()), int(self.entries['min V'].get())],
+                               [int(self.entries['max H'].get()), int(self.entries['max S'].get()), int(self.entries['max V'].get())]]
+            else:
+                range_color = [[int(self.entries['min R'].get()), int(self.entries['min G'].get()), int(self.entries['min B'].get())],
+                               [int(self.entries['max R'].get()), int(self.entries['max G'].get()), int(self.entries['max B'].get())]]
+            colors = self.project_data.find_regions(None, range_color, self.mode.get(), None,
+                        None, None, None,
+                        None , preview="colors")
+            cv2.imshow('colors',colors)
+            cv2.waitKey(0)
         
 
 
@@ -2563,7 +2707,7 @@ class ImageViewer:
         if self.current_mask_color == COLOR_MASK_NONE:
             messagebox.showerror("Error", "No mask class selected.")
             return
-        dialog = FindRegionsDialog(self.root, self.find_regions_dialog_receive_values, self.find_regions_params)
+        dialog = FindRegionsDialog(self.root, self.find_regions_dialog_receive_values, self.project, self.find_regions_params)
         dialog.grab_set() # Make the dialog modal
         self.root.wait_window(dialog) # Wait until the dialog is closed
 
