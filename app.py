@@ -34,10 +34,9 @@
 # 3. Add possibility to select rectangular region.
 # 4. Check mask for consistency, i.e. no COLOR_NONE pixels.
 
-# 5. Add splash window.
-# 6. Add about in memu.
-# 7. Consider to not reset history.
-# 8. Better debugging for history using window to display stack.
+# 5. Add about in memu.
+# 6. Consider to not reset history.
+# 7. Better debugging for history using window to display stack.
 
 # Author Stefano Giani
 
@@ -1400,9 +1399,13 @@ class ImageViewer:
         root : Tkinter root
             Root
         """
+        
+        
         self.root = root
         self.root.title("Image Viewer with Zoom")
         self.root.geometry("512x512")
+        
+        self.show_splash(root, "dice.jpeg", duration=3000)
 
         self.zoom_level = 1.0 # Level of Zoom
         self.project = ProjectData()
@@ -2959,6 +2962,46 @@ class ImageViewer:
         self.canvas.yview_scroll(int(dy), "units")
         self.drag_start_x = event.x
         self.drag_start_y = event.y
+        
+    def show_splash(self,root, image_path, duration=3000):
+        """Routine to show the splash window.
+
+        Parameters
+        ----------
+        root : TK object
+            TK object owning the splash window.
+        image_path : string
+            Path to the image to show.
+        duration : int, optional
+            Duration of the splash screen, by default 3000
+        """
+        splash = tk.Toplevel(root)
+        splash.overrideredirect(True)  # Remove window decorations
+
+        # Load and display image
+        image = Image.open(image_path)
+        photo = ImageTk.PhotoImage(image)
+        img_label = tk.Label(splash, image=photo)
+        img_label.image = photo  # Keep a reference
+        img_label.pack()
+
+        # Add text below the image
+        text_frame = tk.Frame(splash, bg="white")
+        text_frame.pack(fill="both", expand=True)
+        tk.Label(text_frame, text="Authors: Stefano Giani, et al.", bg="white", font=("Arial", 12)).pack(pady=(10, 0))
+        tk.Label(text_frame, text="License: MIT", bg="white", font=("Arial", 10)).pack()
+
+        # Center the splash screen
+        splash.update_idletasks()
+        width = splash.winfo_width()
+        height = splash.winfo_height()
+        x = (splash.winfo_screenwidth() // 2) - (width // 2)
+        y = (splash.winfo_screenheight() // 2) - (height // 2)
+        splash.geometry(f"{width}x{height}+{x}+{y}")
+
+        # Hide splash after duration and show main window
+        root.withdraw()
+        root.after(duration, lambda: (splash.destroy(), root.deiconify()))
 
 # Run the app
 root = tk.Tk()
