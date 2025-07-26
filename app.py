@@ -34,9 +34,8 @@
 # 3. Add possibility to select rectangular region.
 # 4. Check mask for consistency, i.e. no COLOR_NONE pixels.
 
-# 5. Add about in memu.
-# 6. Consider to not reset history.
-# 7. Better debugging for history using window to display stack.
+# 5. Consider to not reset history.
+# 6. Better debugging for history using window to display stack.
 
 # Author Stefano Giani
 
@@ -1551,7 +1550,7 @@ class ImageViewer:
         self.image_menu.add_command(label="Show G Histogram", command=self.show_g_histogram)
         self.image_menu.add_command(label="Show B Histogram", command=self.show_b_histogram)
         self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
-        # Mak Menu
+        # Mask Menu
         self.background_flag = tk.BooleanVar(value=False)
         self.matrix_flag = tk.BooleanVar(value=False)
         self.inclusion_flag = tk.BooleanVar(value=False)
@@ -1560,6 +1559,10 @@ class ImageViewer:
         self.mask_menu.add_checkbutton(label="Matrix", command=self.set_matrix, variable=self.matrix_flag)
         self.mask_menu.add_checkbutton(label="Inclusion", command=self.set_inclusion, variable=self.inclusion_flag)
         self.menu_bar.add_cascade(label="Mask", menu=self.mask_menu)
+        # Help Menu
+        self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.help_menu.add_command(label="About", command=lambda: self.show_about_window(root, "dice.jpeg"))
+        self.menu_bar.add_cascade(label="Help", menu=self.help_menu)
         # Attach the menu bar to the root window
         root.config(menu=self.menu_bar)
 
@@ -3002,6 +3005,40 @@ class ImageViewer:
         # Hide splash after duration and show main window
         root.withdraw()
         root.after(duration, lambda: (splash.destroy(), root.deiconify()))
+    
+    def show_about_window(self, root, image_path):
+        """Routine to show the about window.
+
+        Parameters
+        ----------
+        root : TK object
+            TK object owning the splash window.
+        image_path : string
+            Path to the image to show.
+        """
+        about = tk.Toplevel(root)
+        about.title("About")
+        about.resizable(False, False)
+
+        image = Image.open(image_path)
+        photo = ImageTk.PhotoImage(image)
+        img_label = tk.Label(about, image=photo)
+        img_label.image = photo
+        img_label.pack()
+
+        text_frame = tk.Frame(about, bg="white")
+        text_frame.pack(fill="both", expand=True)
+        tk.Label(text_frame, text="Authors: Stefano Giani, et al.", bg="white", font=("Arial", 12)).pack(pady=(10, 0))
+        tk.Label(text_frame, text="License: MIT", bg="white", font=("Arial", 10)).pack()
+
+        ttk.Button(about, text="Close", command=about.destroy).pack(pady=10)
+
+        about.update_idletasks()
+        width = about.winfo_width()
+        height = about.winfo_height()
+        x = (about.winfo_screenwidth() // 2) - (width // 2)
+        y = (about.winfo_screenheight() // 2) - (height // 2)
+        about.geometry(f"{width}x{height}+{x}+{y}")
 
 # Run the app
 root = tk.Tk()
