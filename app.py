@@ -31,16 +31,13 @@
 # TODO:
 # 1. Very slow to work with images. Add timeglass animation when something is done.
 # 2. Try to speed up image processing for large images.
-# 3. In dialogue where units are used, only display units with not none conversion factor.
-# 4. Add possibility to select rectangular region.
-# 5. Add possibility to preview contours and other intermidiate steps in find regions.
-# 6. Check what happens when double clicked on mask class.
-# 7. Check mask for consistency, i.e. no COLOR_NONE pixels.
+# 3. Add possibility to select rectangular region.
+# 4. Check mask for consistency, i.e. no COLOR_NONE pixels.
 
-# 8. Add splash window.
-# 9. Add about in memu.
-# 10. Consider to not reset history.
-# 11. Better debugging for history using window to display stack.
+# 5. Add splash window.
+# 6. Add about in memu.
+# 7. Consider to not reset history.
+# 8. Better debugging for history using window to display stack.
 
 # Author Stefano Giani
 
@@ -776,8 +773,12 @@ class FindRegionsDialog(tk.Toplevel):
             'max G': {'value': 0, 'min': 0, 'max': 255},
             'max B': {'value': 0, 'min': 0, 'max': 255}
         }
-
         
+        self.units = ["px"]
+
+        if initial_values is not None:
+            if "units" in initial_values:
+                self.units = initial_values["units"]
         
         self.mode = tk.StringVar(value='HSV')
         self.edge_threshold1 = tk.IntVar(value=1)
@@ -872,7 +873,7 @@ class FindRegionsDialog(tk.Toplevel):
         unit_label = ttk.Label(area_frame, text="Unit:")
         unit_label.grid(row=0, column=4, padx=5)
 
-        unit_combo = ttk.Combobox(area_frame, textvariable=self.area_unit, values=["px", "cm²", "mm²", "in²"], state="readonly", width=6)
+        unit_combo = ttk.Combobox(area_frame, textvariable=self.area_unit, values=self.units, state="readonly", width=6)
         unit_combo.grid(row=0, column=5, padx=5)
 
 
@@ -1467,7 +1468,8 @@ class ImageViewer:
             'area_min_px': 0,
             'area_max_px': 0,
             'area_unit': 'px',
-            'ratio_threshold': 0.8
+            'ratio_threshold': 0.8,
+            'units' : []
         }
         
         # Data for the color range dialogue
@@ -2734,6 +2736,14 @@ class ImageViewer:
         if self.current_mask_color == COLOR_MASK_NONE:
             messagebox.showerror("Error", "No mask class selected.")
             return
+        self.find_regions_params["units"] = ["px"]
+        if self.project.conversion_factors["cm"] is not None:
+            self.find_regions_params["units"].append("cm²")
+        if self.project.conversion_factors["mm"] is not None:
+            self.find_regions_params["units"].append("mm²")
+        if self.project.conversion_factors["in"] is not None:
+            self.find_regions_params["units"].append("in²")
+            
         dialog = FindRegionsDialog(self.root, self.find_regions_dialog_receive_values, self.project, self.find_regions_params)
         dialog.grab_set() # Make the dialog modal
         self.root.wait_window(dialog) # Wait until the dialog is closed
