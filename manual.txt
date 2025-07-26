@@ -102,3 +102,4 @@ Ctrl+Y Redo.
 Esc Deselect current tool.
 Right Mouse Buttom Deselect current tool.
 1, 2, 3 Switch from image, to mask and to blend of image and mask.
+When no tools are selected, the image can be drag holding the left mouse bottom down and moving the cursor.

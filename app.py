@@ -31,17 +31,16 @@
 # TODO:
 # 1. Very slow to work with images. Add timeglass animation when something is done.
 # 2. Try to speed up image processing for large images.
-# 3. When no tools are selected, click and drag to move image.
-# 4. In dialogue where units are used, only display units with not none conversion factor.
-# 5. Add possibility to select rectangular region.
-# 6. Add possibility to preview contours and other intermidiate steps in find regions.
-# 7. Check what happens when double clicked on mask class.
-# 8. Check mask for consistency, i.e. no COLOR_NONE pixels.
+# 3. In dialogue where units are used, only display units with not none conversion factor.
+# 4. Add possibility to select rectangular region.
+# 5. Add possibility to preview contours and other intermidiate steps in find regions.
+# 6. Check what happens when double clicked on mask class.
+# 7. Check mask for consistency, i.e. no COLOR_NONE pixels.
 
-# 9. Add splash window.
-# 10. Add about in memu.
-# 11. Consider to not reset history.
-# 12. Better debugging for history using window to display stack.
+# 8. Add splash window.
+# 9. Add about in memu.
+# 10. Consider to not reset history.
+# 11. Better debugging for history using window to display stack.
 
 # Author Stefano Giani
 
@@ -1488,6 +1487,10 @@ class ImageViewer:
             "mode": 'HSV'
         }
         
+        # Variables to drag the image with the mouse
+        self.drag_start_x = 0
+        self.drag_start_y = 0
+        
         # Variables for the ruler
         self.start_point = None
         self.temp_line = None
@@ -1673,6 +1676,8 @@ class ImageViewer:
         self.scroll_x = tk.Scrollbar(self.canvas_frame, orient=tk.HORIZONTAL, command=self.canvas.xview)
         self.scroll_x.grid(row=1, column=0, sticky="ew")
         self.canvas.configure(xscrollcommand=self.scroll_x.set, yscrollcommand=self.scroll_y.set)
+        self.canvas.configure(yscrollincrement='2')
+        self.canvas.configure(xscrollincrement='2')
         # Make the canvas expandable
         self.canvas_frame.grid_rowconfigure(0, weight=1)
         self.canvas_frame.grid_columnconfigure(0, weight=1)
@@ -2223,6 +2228,8 @@ class ImageViewer:
                 self.mask_menu.entryconfig("Matrix", state="normal")
                 self.mask_menu.entryconfig("Inclusion", state="normal")
                 self.reset_ruler()
+                self.canvas.bind("<ButtonPress-1>", self.start_drag)
+                self.canvas.bind("<B1-Motion>", self.do_drag)
                 self.status = STATUS_IMAGE_LOADED
             else:
                 messagebox.showerror("Error", "No transition for the status")
@@ -2309,18 +2316,24 @@ class ImageViewer:
                 self.canvas.unbind("<ButtonPress-1>")
                 self.canvas.unbind("<B1-Motion>")
                 self.canvas.unbind("<ButtonRelease-1>")
+                self.canvas.bind("<ButtonPress-1>", self.start_drag)
+                self.canvas.bind("<B1-Motion>", self.do_drag)
                 self.status_tool = STATUS_TOOL_NONE
             elif self.status_tool == STATUS_TOOL_PICK_COLOR:
                 self.pick_color_flag.set(False)
                 self.canvas.config(cursor="arrow")
                 self.status_label_message.config(text="")
                 self.canvas.unbind("<Button-1>")
+                self.canvas.bind("<ButtonPress-1>", self.start_drag)
+                self.canvas.bind("<B1-Motion>", self.do_drag)
                 self.status_tool = STATUS_TOOL_NONE
             elif self.status_tool == STATUS_TOOL_UNPICK_COLOR:
                 self.unpick_color_flag.set(False)
                 self.canvas.config(cursor="arrow")
                 self.status_label_message.config(text="")
                 self.canvas.unbind("<Button-1>")
+                self.canvas.bind("<ButtonPress-1>", self.start_drag)
+                self.canvas.bind("<B1-Motion>", self.do_drag)
                 self.status_tool = STATUS_TOOL_NONE
             elif self.status_tool == STATUS_TOOL_RULER:
                 self.ruler_flag.set(False)
@@ -2328,12 +2341,16 @@ class ImageViewer:
                 self.status_label_message.config(text="")
                 self.canvas.unbind("<Button-1>")
                 self.reset_ruler()
+                self.canvas.bind("<ButtonPress-1>", self.start_drag)
+                self.canvas.bind("<B1-Motion>", self.do_drag)
                 self.status_tool = STATUS_TOOL_NONE
             elif self.status_tool == STATUS_TOOL_PICK_REGION:
                 self.pick_region_flag.set(False)
                 self.canvas.config(cursor="arrow")
                 self.status_label_message.config(text="")
                 self.canvas.unbind("<Button-1>")
+                self.canvas.bind("<ButtonPress-1>", self.start_drag)
+                self.canvas.bind("<B1-Motion>", self.do_drag)
                 self.status_tool = STATUS_TOOL_NONE
             else:
                 messagebox.showerror("Error", "No transition for the status for tools")
@@ -2345,6 +2362,8 @@ class ImageViewer:
                 self.crop_flag.set(True)
                 self.canvas.config(cursor="cross")
                 self.status_label_message.config(text="Drag a region to crop the image. Esc to cancel.")
+                self.canvas.unbind("<ButtonPress-1>")
+                self.canvas.unbind("<B1-Motion>")
                 # Events for cropping the image
                 self.canvas.bind("<ButtonPress-1>", self.on_mouse_press)
                 self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
@@ -2360,6 +2379,8 @@ class ImageViewer:
                 self.pick_color_flag.set(True)
                 self.canvas.config(cursor="cross")
                 self.status_label_message.config(text="Click on the image to select a color. Esc to cancel.")
+                self.canvas.unbind("<ButtonPress-1>")
+                self.canvas.unbind("<B1-Motion>")
                 # Event for picking a color
                 self.canvas.bind("<Button-1>", self.on_click)
                 self.status_tool = STATUS_TOOL_PICK_COLOR
@@ -2373,6 +2394,8 @@ class ImageViewer:
                 self.unpick_color_flag.set(True)
                 self.canvas.config(cursor="cross")
                 self.status_label_message.config(text="Click on the image to deselect a color. Esc to cancel.")
+                self.canvas.unbind("<ButtonPress-1>")
+                self.canvas.unbind("<B1-Motion>")
                 # Event for unpicking a color
                 self.canvas.bind("<Button-1>", self.on_click)
                 self.status_tool = STATUS_TOOL_UNPICK_COLOR
@@ -2386,6 +2409,8 @@ class ImageViewer:
                 self.ruler_flag.set(True)
                 self.canvas.config(cursor="cross")
                 self.status_label_message.config(text="Click on the image to create a ruler. Esc to cancel.")
+                self.canvas.unbind("<ButtonPress-1>")
+                self.canvas.unbind("<B1-Motion>")
                 # Event for unpicking a color
                 self.canvas.bind("<Button-1>", self.on_click_ruler)
                 self.status_tool = STATUS_TOOL_RULER
@@ -2399,6 +2424,8 @@ class ImageViewer:
                 self.pick_region_flag.set(True)
                 self.canvas.config(cursor="cross")
                 self.status_label_message.config(text="Click on the image to select a region. Esc to cancel.")
+                self.canvas.unbind("<ButtonPress-1>")
+                self.canvas.unbind("<B1-Motion>")
                 # Event for picking a color
                 self.canvas.bind("<Button-1>", self.on_click)
                 self.status_tool = STATUS_TOOL_PICK_REGION
@@ -2896,6 +2923,32 @@ class ImageViewer:
             self.update_undo_redo()
             self.file_menu.entryconfig("Save Project", state="normal")
             self.display_image()
+            
+    def start_drag(self, event):
+        """Routine to start dragging the image with the mouse.
+
+        Parameters
+        ----------
+        event : event object
+            Position of the mouse.
+        """
+        self.drag_start_x = event.x
+        self.drag_start_y = event.y
+
+    def do_drag(self, event):
+        """Routine to drag the image with the mouse.
+
+        Parameters
+        ----------
+        event : event object
+            Position of the mouse.
+        """
+        dx = self.drag_start_x - event.x
+        dy = self.drag_start_y - event.y
+        self.canvas.xview_scroll(int(dx), "units")
+        self.canvas.yview_scroll(int(dy), "units")
+        self.drag_start_x = event.x
+        self.drag_start_y = event.y
 
 # Run the app
 root = tk.Tk()
