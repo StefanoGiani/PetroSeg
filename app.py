@@ -14,6 +14,8 @@
 # - Select a connected region click with the mouse based on color similarity.
 # - Select using color range.
 # - Show histograms of channels.
+# - Tool to deselect a region on the mask.
+# - Tool to select a rectangular region on the mask.
 
 # Shortcuts:
 # Ctrl+N New project and open an image.
