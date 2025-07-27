@@ -38,6 +38,7 @@ Image - Commands related to images.
 	Unpick Region - Unpick a region on the mask.
 	Pick Color Range... - Dialogue to select rgions using color range.
 	Pick Rect - Select a rectangular region on the mask.
+	Unpick Rect - Deselect a rectangular region on the mask.
 	Ruler - Virtual ruler.
 	Pick Color Dialogue... - Dialogue to set the parameters for the Pick Color tool.
 	Pick Region Dialogue... - Dialogue to set the parameters for the Pick Region tool.
@@ -93,6 +94,8 @@ Unpick Region: Click on the mask to remove a connected region based on color sim
 Pick Color Range: Select regions using color range.
 
 Pick Rect: Select a rectangular region on the mask.
+
+Unpick Rect: Deselect a rectangular region on the mask.
 
 Keyboard Shortcutes:
 ----------------------

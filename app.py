@@ -16,6 +16,7 @@
 # - Show histograms of channels.
 # - Tool to deselect a region on the mask.
 # - Tool to select a rectangular region on the mask.
+# - Tool to deselect a rectangular region on the mask.
 
 # Shortcuts:
 # Ctrl+N New project and open an image.
@@ -62,6 +63,7 @@ STATUS_TOOL_RULER = 4 # Ruler selected
 STATUS_TOOL_PICK_REGION = 5 # Pick region selected
 STATUS_TOOL_UNPICK_REGION = 6 # Unpick region selected
 STATUS_TOOL_PICK_RECT = 7 # Pick a rectangular region
+STATUS_TOOL_UNPICK_RECT = 8 # Unpick a rectangular region
 
 # Stati for the displayied image
 STATUS_DISPLAY_NONE = 0
@@ -606,6 +608,22 @@ class ProjectData:
         cv2.rectangle(self.mask, start_point, end_point, color, thickness=-1)
         self.saved = False
         self.stack_actions.append({"action": "MaskRectangle(" + str(start_point) + "," + str(end_point) + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
+                  
+    def unmask_rectangle(self, start_point, end_point):
+        """Deselect a rectangular region on the mask.
+        
+        Parameters
+        ----------
+        start_point : tuple
+            Coordinate of the first corner of the rectangular region.
+        end_point : tuple
+            Coordinate of the second corner of the rectangular region."""
+        self.truncate_stack()
+        self.cursor_stack_action = len(self.stack_actions)
+        
+        cv2.rectangle(self.mask, start_point, end_point, (0,0,0), thickness=-1)
+        self.saved = False
+        self.stack_actions.append({"action": "UnmaskRectangle(" + str(start_point) + "," + str(end_point) + ")", "saved": self.saved, "mask": self.mask.copy()})
                   
         
 
@@ -1570,6 +1588,7 @@ class ImageViewer:
         self.unpick_region_flag = tk.BooleanVar(value=False)
         self.ruler_flag = tk.BooleanVar(value=False)
         self.pick_rect_flag = tk.BooleanVar(value=False)
+        self.unpick_rect_flag = tk.BooleanVar(value=False)
         self.image_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.image_menu.add_command(label="Export Image...", command=self.export_image)
         self.image_menu.add_separator()
@@ -1580,6 +1599,7 @@ class ImageViewer:
         self.image_menu.add_checkbutton(label="Unpick Region", command=self.unpick_region_tool, variable=self.unpick_region_flag)
         self.image_menu.add_command(label="Pick Color Range...", command=self.open_color_range_dialog)
         self.image_menu.add_checkbutton(label="Pick Rect", command=self.pick_rect_tool, variable=self.pick_rect_flag)
+        self.image_menu.add_checkbutton(label="Unpick Rect", command=self.unpick_rect_tool, variable=self.unpick_rect_flag)
         self.image_menu.add_checkbutton(label="Ruler", command=self.ruler_tool, variable=self.ruler_flag)
         self.image_menu.add_separator()
         self.image_menu.add_command(label="Pick Color Dialog...", command=self.open_pick_color_dialog)
@@ -1626,6 +1646,7 @@ class ImageViewer:
         self.image_menu.entryconfig("Pick Region Dialog...", state="disabled")
         self.image_menu.entryconfig("Pick Color Range...", state="disabled")
         self.image_menu.entryconfig("Pick Rect", state="disabled")
+        self.image_menu.entryconfig("Unpick Rect", state="disabled")
         self.image_menu.entryconfig("Set Ruler...", state="disabled")
         self.image_menu.entryconfig("Find Regions...", state="disabled")
         self.image_menu.entryconfig("Ruler", state="disabled")
@@ -2166,6 +2187,12 @@ class ImageViewer:
                 if self.rect_id:
                     self.canvas.delete(self.rect_id)
                 self.rect_id = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline="red")
+            elif self.status_tool == STATUS_TOOL_UNPICK_RECT:
+                self.start_x = self.canvas.canvasx(event.x)
+                self.start_y = self.canvas.canvasy(event.y)
+                if self.rect_id:
+                    self.canvas.delete(self.rect_id)
+                self.rect_id = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline="red")
 
     def on_mouse_drag(self, event):
         """Routine to capture the drag of the cursor.
@@ -2183,6 +2210,10 @@ class ImageViewer:
             elif self.status_tool == STATUS_TOOL_RULER:    
                 self.on_drag_ruler(self, event)
             elif self.status_tool == STATUS_TOOL_PICK_RECT:
+                cur_x = self.canvas.canvasx(event.x)
+                cur_y = self.canvas.canvasy(event.y)
+                self.canvas.coords(self.rect_id, self.start_x, self.start_y, cur_x, cur_y)
+            elif self.status_tool == STATUS_TOOL_UNPICK_RECT:
                 cur_x = self.canvas.canvasx(event.x)
                 cur_y = self.canvas.canvasy(event.y)
                 self.canvas.coords(self.rect_id, self.start_x, self.start_y, cur_x, cur_y)
@@ -2222,6 +2253,19 @@ class ImageViewer:
                 y2 = int(max(self.start_y, end_y) / self.zoom_level)
 
                 self.project.mask_rectangle((x1, y1), (x2, y2), self.current_mask_color)
+                self.display_image()
+                self.file_menu.entryconfig("Save Project", state="normal")
+                self.update_undo_redo()
+            elif self.status_tool == STATUS_TOOL_UNPICK_RECT:
+                end_x = self.canvas.canvasx(event.x)
+                end_y = self.canvas.canvasy(event.y)
+
+                x1 = int(min(self.start_x, end_x) / self.zoom_level)
+                y1 = int(min(self.start_y, end_y) / self.zoom_level)
+                x2 = int(max(self.start_x, end_x) / self.zoom_level)
+                y2 = int(max(self.start_y, end_y) / self.zoom_level)
+
+                self.project.unmask_rectangle((x1, y1), (x2, y2))
                 self.display_image()
                 self.file_menu.entryconfig("Save Project", state="normal")
                 self.update_undo_redo()
@@ -2308,6 +2352,7 @@ class ImageViewer:
                 self.image_menu.entryconfig("Pick Region Dialog...", state="normal")
                 self.image_menu.entryconfig("Pick Color Range...", state="normal")
                 self.image_menu.entryconfig("Pick Rect", state="normal")
+                self.image_menu.entryconfig("Unpick Rect", state="normal")
                 self.image_menu.entryconfig("Set Ruler...", state="normal")
                 self.image_menu.entryconfig("Find Regions...", state="normal")
                 self.image_menu.entryconfig("Ruler", state="normal")
@@ -2359,6 +2404,10 @@ class ImageViewer:
 
     def pick_color_tool(self):
         """Routine to select the pick color tool."""
+        if self.current_mask_color == COLOR_MASK_NONE:
+            messagebox.showerror("Error", "No mask class selected.")
+            self.pick_color_flag.set(False)
+            return
         if not self.pick_color_flag.get():
             self.change_status_tool(STATUS_TOOL_NONE)
         else:
@@ -2373,6 +2422,10 @@ class ImageViewer:
 
     def pick_region_tool(self):
         """Routine to select the pick region tool."""
+        if self.current_mask_color == COLOR_MASK_NONE:
+            messagebox.showerror("Error", "No mask class selected.")
+            self.pick_region_flag.set(False)
+            return
         if not self.pick_region_flag.get():
             self.change_status_tool(STATUS_TOOL_NONE)
         else:
@@ -2387,10 +2440,21 @@ class ImageViewer:
             
     def pick_rect_tool(self):
         """Routine to select the pick rectangle region tool."""
+        if self.current_mask_color == COLOR_MASK_NONE:
+            messagebox.showerror("Error", "No mask class selected.")
+            self.pick_rect_flag.set(False)
+            return
         if not self.pick_rect_flag.get():
             self.change_status_tool(STATUS_TOOL_NONE)
         else:
             self.change_status_tool(STATUS_TOOL_PICK_RECT)
+            
+    def unpick_rect_tool(self):
+        """Routine to select the unpick rectangle region tool."""
+        if not self.unpick_rect_flag.get():
+            self.change_status_tool(STATUS_TOOL_NONE)
+        else:
+            self.change_status_tool(STATUS_TOOL_UNPICK_RECT)
 
     def ruler_tool(self):
         """Routine to select the ruler tool."""
@@ -2469,6 +2533,14 @@ class ImageViewer:
                 self.status_tool = STATUS_TOOL_NONE
             elif self.status_tool == STATUS_TOOL_PICK_RECT:
                 self.pick_rect_flag.set(False)
+                self.canvas.config(cursor="arrow")
+                self.status_label_message.config(text="")
+                self.canvas.unbind("<Button-1>")
+                self.canvas.bind("<ButtonPress-1>", self.start_drag)
+                self.canvas.bind("<B1-Motion>", self.do_drag)
+                self.status_tool = STATUS_TOOL_NONE
+            elif self.status_tool == STATUS_TOOL_UNPICK_RECT:
+                self.unpick_rect_flag.set(False)
                 self.canvas.config(cursor="arrow")
                 self.status_label_message.config(text="")
                 self.canvas.unbind("<Button-1>")
@@ -2584,6 +2656,23 @@ class ImageViewer:
                 self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
                 self.canvas.bind("<ButtonRelease-1>", self.on_mouse_release)
                 self.status_tool = STATUS_TOOL_PICK_RECT
+            else:
+                messagebox.showerror("Error", "No transition for the status for tools")
+        elif new_status == STATUS_TOOL_UNPICK_RECT:
+            # Before chosing a differnt toll, change status to none
+            if self.status_tool is not STATUS_TOOL_NONE:
+                self.change_status_tool( STATUS_TOOL_NONE)
+            if self.status_tool == STATUS_TOOL_NONE:
+                self.unpick_rect_flag.set(True)
+                self.canvas.config(cursor="cross")
+                self.status_label_message.config(text="Drag the rectangular region to deselect. Esc to cancel.")
+                self.canvas.unbind("<ButtonPress-1>")
+                self.canvas.unbind("<B1-Motion>")
+                # Events for selectiong a rectangular region
+                self.canvas.bind("<ButtonPress-1>", self.on_mouse_press)
+                self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
+                self.canvas.bind("<ButtonRelease-1>", self.on_mouse_release)
+                self.status_tool = STATUS_TOOL_UNPICK_RECT
             else:
                 messagebox.showerror("Error", "No transition for the status for tools")
         else:
@@ -2717,12 +2806,18 @@ class ImageViewer:
         
     def open_pick_color_dialog(self):
         """Routine to open the dialogue to set the parameters for the tool pick color."""
+        if self.current_mask_color == COLOR_MASK_NONE:
+            messagebox.showerror("Error", "No mask class selected.")
+            return
         dialog = PickColorDialog(self.root, self.pick_color_dialog_receive_values, "Pick Color Dialogue", self.pick_color_params)
         dialog.grab_set() # Make the dialog modal
         self.root.wait_window(dialog) # Wait until the dialog is closed
 
     def open_pick_region_dialog(self):
         """Routine to open the dialogue to set the parameters for the tool pick region."""
+        if self.current_mask_color == COLOR_MASK_NONE:
+            messagebox.showerror("Error", "No mask class selected.")
+            return
         dialog = PickColorDialog(self.root, self.pick_region_dialog_receive_values, "Pick region Dialogue", self.pick_region_params)
         dialog.grab_set() # Make the dialog modal
         self.root.wait_window(dialog) # Wait until the dialog is closed
