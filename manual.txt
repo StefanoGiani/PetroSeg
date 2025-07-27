@@ -35,6 +35,7 @@ Image - Commands related to images.
 	Pick Color - Pick a color to add a region to the mask.
 	Unpick Color - Unpick a color to remove a region from the mask.
 	Pick Region - Pick a region to add a region to the mask.
+	Unpick Region - Unpick a region on the mask.
 	Pick Color Range... - Dialogue to select rgions using color range.
 	Ruler - Virtual ruler.
 	Pick Color Dialogue... - Dialogue to set the parameters for the Pick Color tool.
@@ -85,6 +86,8 @@ Ruler: Drag a virtual ruler to measure dimensions of features in images.
 Find inclusions: Automatically find inclusions based on edge detection.
 
 Pick Region: Click on the image to add to the mask a connected region based on color similarity.
+
+Unpick Region: Click on the mask to remove a connected region based on color similarity.
 
 Pick Color Range: Select regions using color range.
 

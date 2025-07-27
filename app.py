@@ -59,6 +59,7 @@ STATUS_TOOL_PICK_COLOR = 2 # Pick color selected
 STATUS_TOOL_UNPICK_COLOR = 3 # Unpick color selected
 STATUS_TOOL_RULER = 4 # Ruler selected
 STATUS_TOOL_PICK_REGION = 5 # Pick region selected
+STATUS_TOOL_UNPICK_REGION = 6 # Unpick region selected
 
 # Stati for the displayied image
 STATUS_DISPLAY_NONE = 0
@@ -298,7 +299,27 @@ class ProjectData:
         self.saved = False
         self.stack_actions.append({"action": "SelectRegionRGB(" + str(point) + "," + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
         
+    def deselect_region(self, point):
+        """Deselect a connected region in the mask.
+        
+        Parameters
+        ----------
+        point : tuple
+            Coordinate of the region."""
+        self.truncate_stack()
+        self.cursor_stack_action = len(self.stack_actions)
+        mask_floodfill = np.zeros((self.size[1]+2, self.size[0]+2), np.uint8)
+        cv2.floodFill(self.mask, mask_floodfill, point, (255,255,255),
+                      loDiff=(0,0,0), upDiff=(0,0,0), flags=4)
+        filled_region = mask_floodfill[1:-1, 1:-1]
+        
+        # Create a boolean mask for the condition
+        condition = filled_region != 0
 
+        self.mask[condition] = (0,0,0)
+        self.saved = False
+        self.stack_actions.append({"action": "DeselectRegionRGB(" + str(point) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        
 
     def truncate_stack(self):
         """Truncate the stack of actions.
@@ -1527,6 +1548,7 @@ class ImageViewer:
         self.pick_color_flag = tk.BooleanVar(value=False)
         self.unpick_color_flag = tk.BooleanVar(value=False)
         self.pick_region_flag = tk.BooleanVar(value=False)
+        self.unpick_region_flag = tk.BooleanVar(value=False)
         self.ruler_flag = tk.BooleanVar(value=False)
         self.image_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.image_menu.add_command(label="Export Image...", command=self.export_image)
@@ -1535,6 +1557,7 @@ class ImageViewer:
         self.image_menu.add_checkbutton(label="Pick Color", command=self.pick_color_tool, variable=self.pick_color_flag)
         self.image_menu.add_checkbutton(label="Unpick Color", command=self.unpick_color_tool, variable=self.unpick_color_flag)
         self.image_menu.add_checkbutton(label="Pick Region", command=self.pick_region_tool, variable=self.pick_region_flag)
+        self.image_menu.add_checkbutton(label="Unpick Region", command=self.unpick_region_tool, variable=self.unpick_region_flag)
         self.image_menu.add_command(label="Pick Color Range...", command=self.open_color_range_dialog)
         self.image_menu.add_checkbutton(label="Ruler", command=self.ruler_tool, variable=self.ruler_flag)
         self.image_menu.add_separator()
@@ -1578,6 +1601,7 @@ class ImageViewer:
         self.image_menu.entryconfig("Unpick Color", state="disabled")
         self.image_menu.entryconfig("Pick Color Dialog...", state="disabled")
         self.image_menu.entryconfig("Pick Region", state="disabled")
+        self.image_menu.entryconfig("Unpick Region", state="disabled")
         self.image_menu.entryconfig("Pick Region Dialog...", state="disabled")
         self.image_menu.entryconfig("Pick Color Range...", state="disabled")
         self.image_menu.entryconfig("Set Ruler...", state="disabled")
@@ -1936,6 +1960,20 @@ class ImageViewer:
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
+            # Code to unpick a region
+            elif self.status_tool == STATUS_TOOL_UNPICK_REGION:
+                if self.current_mask_color == COLOR_MASK_NONE:
+                    messagebox.showerror("Error", "No mask class selected.")
+                    return
+                canvas_x = self.canvas.canvasx(event.x)
+                canvas_y = self.canvas.canvasy(event.y)
+                x, y = int(canvas_x / self.zoom_level), int(canvas_y / self.zoom_level)
+                width, height = self.project.size
+                if 0 <= x < width and 0 <= y < height:
+                    self.project.deselect_region((x, y))
+                    self.update_undo_redo()
+                    self.file_menu.entryconfig("Save Project", state="normal")
+                    self.display_image()
             # Code to unpick a color
             elif self.status_tool == STATUS_TOOL_UNPICK_COLOR:
                 canvas_x = self.canvas.canvasx(event.x)
@@ -2221,6 +2259,7 @@ class ImageViewer:
                 self.image_menu.entryconfig("Export Image...", state="normal")
                 self.image_menu.entryconfig("Pick Color Dialog...", state="normal")
                 self.image_menu.entryconfig("Pick Region", state="normal")
+                self.image_menu.entryconfig("Unpick Region", state="normal")
                 self.image_menu.entryconfig("Pick Region Dialog...", state="normal")
                 self.image_menu.entryconfig("Pick Color Range...", state="normal")
                 self.image_menu.entryconfig("Set Ruler...", state="normal")
@@ -2292,6 +2331,13 @@ class ImageViewer:
             self.change_status_tool(STATUS_TOOL_NONE)
         else:
             self.change_status_tool(STATUS_TOOL_PICK_REGION)
+            
+    def unpick_region_tool(self):
+        """Routine to deselect the pick region tool."""
+        if not self.unpick_region_flag.get():
+            self.change_status_tool(STATUS_TOOL_NONE)
+        else:
+            self.change_status_tool(STATUS_TOOL_UNPICK_REGION)
 
     def ruler_tool(self):
         """Routine to select the ruler tool."""
@@ -2354,6 +2400,14 @@ class ImageViewer:
                 self.status_tool = STATUS_TOOL_NONE
             elif self.status_tool == STATUS_TOOL_PICK_REGION:
                 self.pick_region_flag.set(False)
+                self.canvas.config(cursor="arrow")
+                self.status_label_message.config(text="")
+                self.canvas.unbind("<Button-1>")
+                self.canvas.bind("<ButtonPress-1>", self.start_drag)
+                self.canvas.bind("<B1-Motion>", self.do_drag)
+                self.status_tool = STATUS_TOOL_NONE
+            elif self.status_tool == STATUS_TOOL_UNPICK_REGION:
+                self.unpick_region_flag.set(False)
                 self.canvas.config(cursor="arrow")
                 self.status_label_message.config(text="")
                 self.canvas.unbind("<Button-1>")
@@ -2437,6 +2491,21 @@ class ImageViewer:
                 # Event for picking a color
                 self.canvas.bind("<Button-1>", self.on_click)
                 self.status_tool = STATUS_TOOL_PICK_REGION
+            else:
+                messagebox.showerror("Error", "No transition for the status for tools") 
+        elif new_status == STATUS_TOOL_UNPICK_REGION:
+            # Before chosing a differnt toll, change status to none
+            if self.status_tool is not STATUS_TOOL_NONE:
+                self.change_status_tool( STATUS_TOOL_NONE)
+            if self.status_tool == STATUS_TOOL_NONE:
+                self.unpick_region_flag.set(True)
+                self.canvas.config(cursor="cross")
+                self.status_label_message.config(text="Click on the mask to deselect a region. Esc to cancel.")
+                self.canvas.unbind("<ButtonPress-1>")
+                self.canvas.unbind("<B1-Motion>")
+                # Event for picking a color
+                self.canvas.bind("<Button-1>", self.on_click)
+                self.status_tool = STATUS_TOOL_UNPICK_REGION
             else:
                 messagebox.showerror("Error", "No transition for the status for tools")  
         else:
