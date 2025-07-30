@@ -17,6 +17,7 @@
 # - Tool to deselect a region on the mask.
 # - Tool to select a rectangular region on the mask.
 # - Tool to deselect a rectangular region on the mask.
+# - Possibility to decide if to overwride already set classes in the mask or not.
 
 # Shortcuts:
 # Ctrl+N New project and open an image.
@@ -35,9 +36,10 @@
 # 1. Very slow to work with images. Add timeglass animation when something is done.
 # 2. Try to speed up image processing for large images.
 # 3. Check mask for consistency, i.e. no COLOR_NONE pixels.
+# 4. Add code to split into small cropped images.
 
-# 4. Consider to not reset history.
-# 5. Better debugging for history using window to display stack.
+# 5. Consider to not reset history.
+# 6. Better debugging for history using window to display stack.
 
 # Author Stefano Giani
 
@@ -184,7 +186,7 @@ class ProjectData:
         self.saved = True
 
 
-    def select_color_hsv(self, lower, upper, color):
+    def select_color_hsv(self, lower, upper, color, overwrite = True):
         """Select a region in the mask based on range in HSV colors.
         
         Parameters
@@ -193,17 +195,24 @@ class ProjectData:
             Three uint8 values to determine the lower value for the range in HSV.
         upper : tuple
             Three uint8 values to determine the upper value for the range in HSV.
-        color: tuple
-            Three uint8 values to determine the RGB color to use to mark the region on the mask."""
+        color : tuple
+            Three uint8 values to determine the RGB color to use to mark the region on the mask.
+        overwrite : logical, optional
+            Control if the non zero values of the mask can be overwritten, by default True."""
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
         mask = cv2.inRange(self.hsv, lower, upper)
-        # Apply the color where mask == 255
-        self.mask[mask == 255] = color
+        if overwrite:
+            # Apply the color where mask == 255
+            self.mask[mask == 255] = color
+        else:
+            # Create a boolean mask for the condition
+            condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (mask == 255)
+            self.mask[condition] = color
         self.saved = False
-        self.stack_actions.append({"action": "SelectColorHSV(" + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        self.stack_actions.append({"action": "SelectColorHSV(" + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
         
-    def select_color_rgb(self, lower, upper, color):
+    def select_color_rgb(self, lower, upper, color, overwrite = True):
         """Select a region in the mask based on range in RGB colors.
         
         Parameters
@@ -213,16 +222,23 @@ class ProjectData:
         upper : tuple
             Three uint8 values to determine the upper value for the range in RGB.
         color: tuple
-            Three uint8 values to determine the RGB color to use to mark the region on the mask."""
+            Three uint8 values to determine the RGB color to use to mark the region on the mask.
+        overwrite : logical, optional
+            Control if the non zero values of the mask can be overwritten, by default True."""
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
         mask = cv2.inRange(np.array(self.rgb), lower, upper)
-        # Apply the color where mask == 255
-        self.mask[mask == 255] = color
+        if overwrite:
+            # Apply the color where mask == 255
+            self.mask[mask == 255] = color
+        else:
+            # Create a boolean mask for the condition
+            condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (mask == 255)
+            self.mask[condition] = color
         self.saved = False
-        self.stack_actions.append({"action": "SelectColorRGB(" + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        self.stack_actions.append({"action": "SelectColorRGB(" + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
         
-    def select_region_hsv(self, point, lower, upper, color):
+    def select_region_hsv(self, point, lower, upper, color, overwrite = True):
         """Select a connected region in the mask using HSV.
         The floofill routine in cv2 accepts only RGB images, not HSV.
         Therefore I have to do a workaround by selecting a color range in HSV first,
@@ -237,7 +253,9 @@ class ProjectData:
         upper : tuple
             Three uint8 values to determine the upper value for the range in HSV.
         color: tuple
-            Three uint8 values to determine the RGB color to use to mark the region on the mask."""
+            Three uint8 values to determine the RGB color to use to mark the region on the mask.
+        overwrite : logical, optional
+            Control if the non zero values of the mask can be overwritten, by default True."""
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
         color_tmp = self.hsv[point[1],point[0],:]
@@ -269,14 +287,18 @@ class ProjectData:
         
         filled_region = flood_mask[1:-1, 1:-1]
         
-        # Create a boolean mask for the condition
-        condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (filled_region != 0)
+        if overwrite:
+            # Create a boolean mask for the condition
+            condition = filled_region != 0
+        else:
+            # Create a boolean mask for the condition
+            condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (filled_region != 0)
 
         self.mask[condition] = color
         self.saved = False
-        self.stack_actions.append({"action": "SelectRegionHSV(" + str(point) + "," + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        self.stack_actions.append({"action": "SelectRegionHSV(" + str(point) + "," + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite)  + ")", "saved": self.saved, "mask": self.mask.copy()})
         
-    def select_region_rgb(self, point, lower, upper, color):
+    def select_region_rgb(self, point, lower, upper, color, overwrite = True):
         """Select a connected region in the mask using RGB.
         
         Parameters
@@ -288,7 +310,9 @@ class ProjectData:
         upper : tuple
             Three uint8 values to determine the upper value for the range in RGB.
         color: tuple
-            Three uint8 values to determine the RGB color to use to mark the region on the mask."""
+            Three uint8 values to determine the RGB color to use to mark the region on the mask.
+        overwrite : logical, optional
+            Control if the non zero values of the mask can be overwritten, by default True."""
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
         mask_floodfill = np.zeros((self.size[1]+2, self.size[0]+2), np.uint8)
@@ -296,12 +320,16 @@ class ProjectData:
                       loDiff=lower, upDiff=upper, flags=4)
         filled_region = mask_floodfill[1:-1, 1:-1]
         
-        # Create a boolean mask for the condition
-        condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (filled_region != 0)
+        if overwrite:
+            # Create a boolean mask for the condition
+            condition = filled_region != 0
+        else:
+            # Create a boolean mask for the condition
+            condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (filled_region != 0)
 
         self.mask[condition] = color
         self.saved = False
-        self.stack_actions.append({"action": "SelectRegionRGB(" + str(point) + "," + str(lower) + "," + str(upper)  + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        self.stack_actions.append({"action": "SelectRegionRGB(" + str(point) + "," + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
         
     def deselect_region(self, point):
         """Deselect a connected region in the mask.
@@ -444,7 +472,7 @@ class ProjectData:
     def find_regions(self, mask_color, range_color, color_encoding='RGB', edge_threshold1=100,
                         edge_threshold2=200, min_area=1, max_area=1000,
                         ratio_threshold=0.8, contour_retrieval=cv2.RETR_TREE,
-                        approximation=cv2.CHAIN_APPROX_SIMPLE, preview=None):
+                        approximation=cv2.CHAIN_APPROX_SIMPLE, preview=None, overwrite = True):
         """Routine to automatically find regions using edges.
 
         Parameters
@@ -481,6 +509,8 @@ class ProjectData:
             None: Full algorithm
             "edges" : mask with edges returned.
             "colors" : return mask of selected colors.
+        overwrite : logical, optional
+            Control if the non zero values of the mask can be overwritten, by default True.
 
         Returns
         -------
@@ -550,19 +580,24 @@ class ProjectData:
         # Clip mask values        
         mask_incusions = mask_incusions.clip(0, 255).astype("uint8")
                 
-        # Apply the color where mask == 255
-        self.mask[mask_incusions != 0] = mask_color
+        if overwrite:
+            # Apply the color where mask == 255
+            self.mask[mask_incusions != 0] = mask_color
+        else:
+            # Create a boolean mask for the condition
+            condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (mask_incusions != 0)
+            self.mask[condition] = mask_color
         self.saved = False
         self.stack_actions.append({"action": "FindRegions(" + str(mask_color)  + 
                                    "," + str(range_color)  + "," + str(color_encoding)  + 
                                    "," + str(edge_threshold1)  + "," + str(edge_threshold2)  + 
                                    "," + str(min_area)  + "," + str(max_area)  + 
                                    "," + str(ratio_threshold)  + "," + str(contour_retrieval)  + 
-                                   "," + str(approximation) + ")", "saved": self.saved, "mask": self.mask.copy()})
+                                   "," + str(approximation) + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
                                    
         return inclusion_count   
     
-    def color_range(self, mask_color, range_color, color_encoding='RGB'):
+    def color_range(self, mask_color, range_color, color_encoding='RGB', overwrite = True):
         """Routine to select a range of colors.
 
         Parameters
@@ -572,8 +607,9 @@ class ProjectData:
         range_color : list of two tuple
             Two sets of three uint8 values each to determine the lower and upper values for the range in RGB/HSV.
         color_encoding : str, optional
-            Type of color encoding used in range_color. Either RGB or HSV, by default 'RGB'
-        
+            Type of color encoding used in range_color. Either RGB or HSV, by default 'RGB'.
+        overwrite : logical, optional
+            Control if the non zero values of the mask can be overwritten, by default True.
         """
         
         self.truncate_stack()
@@ -584,14 +620,19 @@ class ProjectData:
             mask = cv2.inRange(image, np.asarray(range_color[0]), np.asarray(range_color[1])) 
         else: # HSV
             mask = cv2.inRange(self.hsv, np.asarray(range_color[0]), np.asarray(range_color[1])) 
+        if overwrite:
+            # Apply the color where mask == 255
+            self.mask[mask != 0] = mask_color
+        else:
+            # Create a boolean mask for the condition
+            condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (mask != 0)
+            self.mask[condition] = mask_color
             
-        # Apply the color where mask == 255
-        self.mask[mask != 0] = mask_color
         self.saved = False
         self.stack_actions.append({"action": "ColorRange(" + str(mask_color)  + 
-                                   "," + str(range_color)  + "," + str(color_encoding) + ")", "saved": self.saved, "mask": self.mask.copy()})
+                                   "," + str(range_color)  + "," + str(color_encoding) + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
         
-    def mask_rectangle(self, start_point, end_point, color):
+    def mask_rectangle(self, start_point, end_point, color, overwrite = True):
         """Select a rectangular region on the mask.
         
         Parameters
@@ -601,13 +642,21 @@ class ProjectData:
         end_point : tuple
             Coordinate of the second corner of the rectangular region.
         color: tuple
-            Three uint8 values to determine the RGB color to use to mark the region on the mask."""
+            Three uint8 values to determine the RGB color to use to mark the region on the mask.
+        overwrite : logical, optional
+            Control if the non zero values of the mask can be overwritten, by default True."""
         self.truncate_stack()
         self.cursor_stack_action = len(self.stack_actions)
         
-        cv2.rectangle(self.mask, start_point, end_point, color, thickness=-1)
+        if overwrite:
+            cv2.rectangle(self.mask, start_point, end_point, color, thickness=-1)
+        else:
+            mask_copy = self.mask.copy()
+            cv2.rectangle(mask_copy, start_point, end_point, color, thickness=-1)
+            condition = (mask_copy[:,:,0] == color[0]) & (mask_copy[:,:,1] == color[1]) & (mask_copy[:,:,2] == color[2]) & (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0)
+            self.mask[condition] = color
         self.saved = False
-        self.stack_actions.append({"action": "MaskRectangle(" + str(start_point) + "," + str(end_point) + "," + str(color) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        self.stack_actions.append({"action": "MaskRectangle(" + str(start_point) + "," + str(end_point) + "," + str(color) + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
                   
     def unmask_rectangle(self, start_point, end_point):
         """Deselect a rectangular region on the mask.
@@ -1207,7 +1256,7 @@ class FindRegionsDialog(tk.Toplevel):
         if self.validate(): 
             edges = self.project_data.find_regions(None, None, "RGB", self.edge_min.get(),
                         self.edge_max.get(), None, None,
-                        None , preview="edges")
+                        None , preview="edges", overwrite = self.overwrite_flag.get())
             cv2.imshow('edges',edges)
             cv2.waitKey(0)
             
@@ -1223,7 +1272,7 @@ class FindRegionsDialog(tk.Toplevel):
                                [int(self.entries['max R'].get()), int(self.entries['max G'].get()), int(self.entries['max B'].get())]]
             colors = self.project_data.find_regions(None, range_color, self.mode.get(), None,
                         None, None, None,
-                        None , preview="colors")
+                        None , preview="colors", overwrite = self.overwrite_flag.get())
             cv2.imshow('colors',colors)
             cv2.waitKey(0)
         
@@ -1589,6 +1638,7 @@ class ImageViewer:
         self.ruler_flag = tk.BooleanVar(value=False)
         self.pick_rect_flag = tk.BooleanVar(value=False)
         self.unpick_rect_flag = tk.BooleanVar(value=False)
+        self.overwrite_flag = tk.BooleanVar(value=False)
         self.image_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.image_menu.add_command(label="Export Image...", command=self.export_image)
         self.image_menu.add_separator()
@@ -1622,6 +1672,7 @@ class ImageViewer:
         self.mask_menu.add_checkbutton(label="Background", command=self.set_background, variable=self.background_flag)
         self.mask_menu.add_checkbutton(label="Matrix", command=self.set_matrix, variable=self.matrix_flag)
         self.mask_menu.add_checkbutton(label="Inclusion", command=self.set_inclusion, variable=self.inclusion_flag)
+        self.mask_menu.add_checkbutton(label="Overwrite", variable=self.overwrite_flag)
         self.menu_bar.add_cascade(label="Mask", menu=self.mask_menu)
         # Help Menu
         self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
@@ -1943,7 +1994,7 @@ class ImageViewer:
                         else:
                             upper[2] = 255
 
-                        self.project.select_color_hsv(lower, upper, self.current_mask_color)
+                        self.project.select_color_hsv(lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
                     elif self.pick_color_params['mode'] == 'RGB':
                         # Get the color at the clicked point
                         red, green, blue = self.project.rgb.getpixel((x, y))
@@ -1976,7 +2027,7 @@ class ImageViewer:
                         else:
                             upper[2] = 255
 
-                        self.project.select_color_rgb(lower, upper, self.current_mask_color)
+                        self.project.select_color_rgb(lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -1994,12 +2045,12 @@ class ImageViewer:
                         lower = (self.pick_region_params['H'], self.pick_region_params['S'], self.pick_region_params['V'])
                         upper = (self.pick_region_params['H'], self.pick_region_params['S'], self.pick_region_params['V'])
                         
-                        self.project.select_region_hsv((x, y), lower, upper, self.current_mask_color)
+                        self.project.select_region_hsv((x, y), lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
                     elif self.pick_region_params['mode'] == 'RGB':
                         lower = (self.pick_region_params['R'], self.pick_region_params['G'], self.pick_region_params['B'])
                         upper = (self.pick_region_params['R'], self.pick_region_params['G'], self.pick_region_params['B'])
 
-                        self.project.select_region_rgb((x, y), lower, upper, self.current_mask_color)
+                        self.project.select_region_rgb((x, y), lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -2058,7 +2109,7 @@ class ImageViewer:
                         else:
                             upper[2] = 255
 
-                        self.project.select_color_hsv(lower, upper, COLOR_MASK_NONE)
+                        self.project.select_color_hsv(lower, upper, COLOR_MASK_NONE, overwrite = self.overwrite_flag.get())
                     elif self.pick_color_params['mode'] == 'RGB':
                         # Get the color at the clicked point
                         red, green, blue = self.project.rgb.getpixel((x, y))
@@ -2091,7 +2142,7 @@ class ImageViewer:
                         else:
                             upper[2] = 255
 
-                        self.project.select_color_rgb(lower, upper, COLOR_MASK_NONE)
+                        self.project.select_color_rgb(lower, upper, COLOR_MASK_NONE, overwrite = self.overwrite_flag.get())
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -2252,7 +2303,7 @@ class ImageViewer:
                 x2 = int(max(self.start_x, end_x) / self.zoom_level)
                 y2 = int(max(self.start_y, end_y) / self.zoom_level)
 
-                self.project.mask_rectangle((x1, y1), (x2, y2), self.current_mask_color)
+                self.project.mask_rectangle((x1, y1), (x2, y2), self.current_mask_color, overwrite = self.overwrite_flag.get())
                 self.display_image()
                 self.file_menu.entryconfig("Save Project", state="normal")
                 self.update_undo_redo()
@@ -3055,7 +3106,7 @@ class ImageViewer:
             self.project.find_regions(self.current_mask_color, range_color, self.find_regions_params['mode'], self.find_regions_params['edge_threshold1'],
                         self.find_regions_params['edge_threshold2'], self.find_regions_params['area_min_px'], self.find_regions_params['area_max_px'],
                         self.find_regions_params['ratio_threshold'] , contour_retrieval=cv2.RETR_TREE,
-                        approximation=cv2.CHAIN_APPROX_SIMPLE)
+                        approximation=cv2.CHAIN_APPROX_SIMPLE, overwrite = self.overwrite_flag.get())
             self.update_undo_redo()
             self.file_menu.entryconfig("Save Project", state="normal")
             self.display_image()
@@ -3177,7 +3228,7 @@ class ImageViewer:
                 range_color = [[values['min R'], values['min G'], values['min B']],
                                [values['max R'], values['max G'], values['max B']]]
                 
-            self.project.color_range(self.current_mask_color, range_color, self.color_range_params['mode'])
+            self.project.color_range(self.current_mask_color, range_color, self.color_range_params['mode'], overwrite = self.overwrite_flag.get())
             self.update_undo_redo()
             self.file_menu.entryconfig("Save Project", state="normal")
             self.display_image()
