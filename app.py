@@ -1,3 +1,9 @@
+
+# This file is licensed under the Creative Commons Attribution-NonCommercial 4.0 International License.
+# See the LICENSE file or visit https://creativecommons.org/licenses/by-nc/4.0/ for details.
+# © Stefano Giani
+
+
 # Python app to crop an image.
 #
 # Features:
@@ -1508,7 +1514,7 @@ class ImageViewer:
         
         
         self.root = root
-        self.root.title("Image Viewer with Zoom")
+        self.root.title("PetroSeg")
         self.root.geometry("512x512")
         
         self.show_splash(root, "dice.jpeg", duration=3000)
@@ -3284,8 +3290,8 @@ class ImageViewer:
         # Add text below the image
         text_frame = tk.Frame(splash, bg="white")
         text_frame.pack(fill="both", expand=True)
-        tk.Label(text_frame, text="Authors: Stefano Giani, et al.", bg="white", font=("Arial", 12)).pack(pady=(10, 0))
-        tk.Label(text_frame, text="License: MIT", bg="white", font=("Arial", 10)).pack()
+        tk.Label(text_frame, text="Authors: Stefano Giani and Lucy Standish.", bg="white", font=("Arial", 12)).pack(pady=(10, 0))
+        tk.Label(text_frame, text="License: CC-BY-NC-4.0", bg="white", font=("Arial", 10)).pack()
 
         # Center the splash screen
         splash.update_idletasks()
@@ -3321,8 +3327,8 @@ class ImageViewer:
 
         text_frame = tk.Frame(about, bg="white")
         text_frame.pack(fill="both", expand=True)
-        tk.Label(text_frame, text="Authors: Stefano Giani, et al.", bg="white", font=("Arial", 12)).pack(pady=(10, 0))
-        tk.Label(text_frame, text="License: MIT", bg="white", font=("Arial", 10)).pack()
+        tk.Label(text_frame, text="Authors: Stefano Giani and Lucy Standish", bg="white", font=("Arial", 12)).pack(pady=(10, 0))
+        tk.Label(text_frame, text="License: CC-BY-NC-4.0", bg="white", font=("Arial", 10)).pack()
 
         ttk.Button(about, text="Close", command=about.destroy).pack(pady=10)
 

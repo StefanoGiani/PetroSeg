@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Your App Name"
+version: "1.0.0"
+date-released: 2025-07-31
+authors:
+  - family-names: Giani
+    given-names: Stefano
+    orcid: "https://orcid.org/0000-0000-0000-0000"  # Optional
+license: CC-BY-NC-4.0
+repository-code: https://github.com/yourusername/your-repo-name
+url: https://github.com/yourusername/your-repo-name
