@@ -41,11 +41,10 @@
 # TODO:
 # 1. Very slow to work with images. Add timeglass animation when something is done.
 # 2. Try to speed up image processing for large images.
-# 3. Check mask for consistency, i.e. no COLOR_NONE pixels.
-# 4. Add code to split into small cropped images.
+# 3. Add code to split into small cropped images.
 
-# 5. Consider to not reset history.
-# 6. Better debugging for history using window to display stack.
+# 4. Consider to not reset history.
+# 5. Better debugging for history using window to display stack.
 
 # Author Stefano Giani
 
@@ -680,6 +679,48 @@ class ProjectData:
         self.saved = False
         self.stack_actions.append({"action": "UnmaskRectangle(" + str(start_point) + "," + str(end_point) + ")", "saved": self.saved, "mask": self.mask.copy()})
                   
+    def check_mask_consistency(self):
+        """Routine to check if in the mask there are still pixels not associated to a class.
+        If all pixels associated to a class, then the mask is consistent and the routine returns true.
+
+        Returns
+        -------
+        logical
+            If all pixels associated to a class, then the mask is consistent and the routine returns true.
+        """
+        target_color = np.array([0, 0, 0]) 
+
+        mask = cv2.inRange(self.mask, target_color, target_color)
+        
+        return (not (cv2.countNonZero(mask) > 0))
+    
+    def select_color_mask(self, lower, upper, color, overwrite = True):
+        """Select a region in the mask based on range in RGB colors of the mask.
+        
+        Parameters
+        ----------
+        lower : tuple
+            Three uint8 values to determine the lower value for the range in RGB.
+        upper : tuple
+            Three uint8 values to determine the upper value for the range in RGB.
+        color: tuple
+            Three uint8 values to determine the RGB color to use to mark the region on the mask.
+        overwrite : logical, optional
+            Control if the non zero values of the mask can be overwritten, by default True."""
+        self.truncate_stack()
+        self.cursor_stack_action = len(self.stack_actions)
+        mask = cv2.inRange(self.mask, lower, upper)
+        if overwrite:
+            # Apply the color where mask == 255
+            self.mask[mask == 255] = color
+        else:
+            # Create a boolean mask for the condition
+            condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (mask == 255)
+            self.mask[condition] = color
+        self.saved = False
+        self.stack_actions.append({"action": "SelectColorMask(" + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        
+
         
 
 # Class for creating the dialog to set up the parameters for the tool pick color
@@ -1499,7 +1540,52 @@ class ColorRangeDialog(tk.Toplevel):
     def cancel(self):
         """Routine to cancel the dialogue."""
         self.callback(None, None)
-        self.destroy()        
+        self.destroy()      
+ 
+# Class for the popup window to check the consistency of the mask        
+class CustomPopupMaskConsistency:
+    def __init__(self, parent):
+        """Constructor.
+
+        Parameters
+        ----------
+        parent : TK class
+            Parent object.
+        """
+        self.choice = None
+        self.top = tk.Toplevel(parent)
+        self.top.title("Mask consistency")
+
+        # Message
+        label = tk.Label(self.top, text="Not all pixel in the mask are assigned to classes. What class should be used for the not assigned pixels?", font=("Arial", 14)).pack(pady=10)
+
+        
+        # Frame to hold buttons horizontally
+        button_frame = tk.Frame(self.top)
+        button_frame.pack(side=tk.BOTTOM, pady=10)
+
+        
+        # Create buttons in a row
+        for label in ["Background", "Matrix", "Inclusions", "Cancel"]:
+            tk.Button(button_frame, text=label, width=12,
+                      command=lambda l=label: self.set_choice(l)).pack(side=tk.LEFT, padx=5)
+
+
+        # Wait for the window to close
+        self.top.grab_set()
+        parent.wait_window(self.top)
+
+    def set_choice(self, label):
+        """Routine to access the pressed button.
+        
+        Parameters
+        ----------
+        label : string
+            Label of the pressed button.
+        """
+        self.choice = label
+        self.top.destroy()
+  
         
 # Class implementing the app
 class ImageViewer:
@@ -1679,6 +1765,7 @@ class ImageViewer:
         self.mask_menu.add_checkbutton(label="Matrix", command=self.set_matrix, variable=self.matrix_flag)
         self.mask_menu.add_checkbutton(label="Inclusion", command=self.set_inclusion, variable=self.inclusion_flag)
         self.mask_menu.add_checkbutton(label="Overwrite", variable=self.overwrite_flag)
+        self.mask_menu.add_command(label="Check Consistency...", command=self.check_consistency)
         self.menu_bar.add_cascade(label="Mask", menu=self.mask_menu)
         # Help Menu
         self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
@@ -1716,6 +1803,8 @@ class ImageViewer:
         self.mask_menu.entryconfig("Background", state="disabled")
         self.mask_menu.entryconfig("Matrix", state="disabled")
         self.mask_menu.entryconfig("Inclusion", state="disabled")
+        self.mask_menu.entryconfig("Overwrite", state="disabled")
+        self.mask_menu.entryconfig("Check Consistency...", state="disabled")
         
         # Status bar at the bottom of the window
         self.status_frame = tk.Frame(root, bd=1, relief=tk.SUNKEN)
@@ -2422,6 +2511,8 @@ class ImageViewer:
                 self.mask_menu.entryconfig("Background", state="normal")
                 self.mask_menu.entryconfig("Matrix", state="normal")
                 self.mask_menu.entryconfig("Inclusion", state="normal")
+                self.mask_menu.entryconfig("Overwrite", state="normal")
+                self.mask_menu.entryconfig("Check Consistency...", state="normal")
                 self.reset_ruler()
                 self.canvas.bind("<ButtonPress-1>", self.start_drag)
                 self.canvas.bind("<B1-Motion>", self.do_drag)
@@ -3338,6 +3429,30 @@ class ImageViewer:
         x = (about.winfo_screenwidth() // 2) - (width // 2)
         y = (about.winfo_screenheight() // 2) - (height // 2)
         about.geometry(f"{width}x{height}+{x}+{y}")
+        
+    def check_consistency(self):
+        """Routine to check if all the pixels in the mask are assigned.
+        """
+        if self.project.check_mask_consistency():
+            messagebox.showinfo("Mask consistency", "All the pixels in the mask are assigned to classes.")
+        else:
+            popup = CustomPopupMaskConsistency(self.root)
+            if popup.choice == 'Background':
+                self.project.select_color_mask(COLOR_MASK_NONE, COLOR_MASK_NONE, COLOR_MASK_BACKGROUND, overwrite = False)
+                self.update_undo_redo()
+                self.file_menu.entryconfig("Save Project", state="normal")
+                self.display_image()
+            elif popup.choice == 'Matrix':
+                self.project.select_color_mask(COLOR_MASK_NONE, COLOR_MASK_NONE, COLOR_MASK_MATRIX, overwrite = False)
+                self.update_undo_redo()
+                self.file_menu.entryconfig("Save Project", state="normal")
+                self.display_image()
+            elif popup.choice == 'Inclusions':
+                self.project.select_color_mask(COLOR_MASK_NONE, COLOR_MASK_NONE, COLOR_MASK_INCLUSION, overwrite = False)
+                self.update_undo_redo()
+                self.file_menu.entryconfig("Save Project", state="normal")
+                self.display_image()
+
 
 # Run the app
 root = tk.Tk()
