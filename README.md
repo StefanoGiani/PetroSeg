@@ -1,6 +1,53 @@
-# Learning_Tkinter
+# PetroSeg
 
-Repository I used to learn programming GUI in python using Tkinter.
+Python app to label images of thin sections for segmentation.
+
+## Installation
+
+### 1. Clone the Repository
+
+git https://github.com/StefanoGiani/Learning_Tkinter.git
+cd Learning_Tkinter
+
+### 2. Install Tkinter (if not already installed)
+
+Tkinter is usually included with Python, but if it's missing, follow the instructions below:
+
+🪟 Windows
+pip install tk
+
+🍎 macOS
+If using Homebrew Python:
+brew install python-tk
+Or install Python from python.org which includes Tkinter.
+
+🐧 Linux (Ubuntu/Debian)
+sudo apt-get install python3-tk
+
+### 3. Create a Virtual Environment (Recommended)
+Creating a virtual environment helps isolate your app's dependencies.
+
+🪟 Windows (CMD or PowerShell)
+python -m venv venv
+venv\Scripts\activate
+
+🍎 macOS / 🐧 Linux
+python3 -m venv venv
+source venv/bin/activate
+
+To deactivate the environment later, just run deactivate.
+
+### 4. Install Python Dependencies
+
+Make sure you have Python 3.8 or later installed. Then run:
+
+pip install -r requirements.txt
+
+### 5. Running the App
+
+Once dependencies are installed, run the app with:
+python PetroSeg.py
+
 
 ## License
 

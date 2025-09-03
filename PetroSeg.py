@@ -4,7 +4,7 @@
 # © Stefano Giani
 
 
-# Python app to crop an image.
+# Python app to label images of thin sections for segmentation.
 #
 # Features:
 # - The image can be zoomed in and out.
@@ -1588,7 +1588,7 @@ class CustomPopupMaskConsistency:
   
         
 # Class implementing the app
-class ImageViewer:
+class PetroSeg:
     def __init__(self, root):
         """Constructor for the app.
 
@@ -3456,5 +3456,5 @@ class ImageViewer:
 
 # Run the app
 root = tk.Tk()
-app = ImageViewer(root)
+app = PetroSeg(root)
 root.mainloop()
