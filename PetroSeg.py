@@ -56,6 +56,8 @@ import cv2
 import numpy as np
 import math 
 import matplotlib.pyplot as plt
+import colorsys
+import h5py
 
 # Stati of the app:
 STATUS_NONE = 0 # Just started 
@@ -720,8 +722,189 @@ class ProjectData:
         self.saved = False
         self.stack_actions.append({"action": "SelectColorMask(" + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
         
+    def extract_regions(self, color):
+        """_summary_
 
+        Parameters
+        ----------
+        color: tuple
+            Three uint8 values to determine the RGB color used in the mask to indicate inclusions.
+
+        Returns
+        -------
+        list
+            Each element of the list represent an inclusion and for each inclusions the following informations are reported:
+            area
+            boundary box
+            centroid
+            aspect_ratio
+            circularity
+            convex_hull_area
+            solidity
+            eccentricity
+            convexity
+            hu_moments
+            avg_rgb
+            avg_hsv
+            std_rgb
+            std_hsv
+            
+        """
+
+        # Create a mask for the inclusion color
+        mask = cv2.inRange(self.mask, np.array(color), np.array(color))
+
+
+        # Find contours of the disconnected regions
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Extract statistics for each region
+        regions_stats = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            x, y, w, h = cv2.boundingRect(contour)
+            aspect_ratio = float(w) / h if h != 0 else 0
+            perimeter = cv2.arcLength(contour, True)
+            circularity = 4 * np.pi * area / (perimeter ** 2) if perimeter != 0 else 0
+
+            hull = cv2.convexHull(contour)
+            hull_area = cv2.contourArea(hull)
+            solidity = float(area) / hull_area if hull_area != 0 else 0
+            convexity = perimeter / cv2.arcLength(hull, True) if cv2.arcLength(hull, True) != 0 else 0
+    
+            M = cv2.moments(contour)
+            if M['m00'] != 0:
+                cx = int(M['m10'] / M['m00'])
+                cy = int(M['m01'] / M['m00'])
+            else:
+                cx, cy = 0, 0
+                
+                
+            # Eccentricity calculation using ellipse fitting
+            if len(contour) >= 5:
+                ellipse = cv2.fitEllipse(contour)
+                (center, axes, orientation) = ellipse
+                major_axis = max(axes)
+                minor_axis = min(axes)
+                eccentricity = np.sqrt(1 - (minor_axis / major_axis) ** 2)
+            else:
+                eccentricity = 0
+                
+            # Hu Moments
+            hu_moments = cv2.HuMoments(M).flatten().tolist()
+            
+            #for contour in contours:
+            # Create a blank mask the same size as the original mask
+            region_mask = np.zeros(mask.shape, dtype=np.uint8)
+
+            # Draw the filled contour on the mask
+            cv2.drawContours(region_mask, [contour], -1, 255, thickness=cv2.FILLED)
+
+            # Get coordinates of all non-zero pixels (i.e., the region)
+            pixels = np.column_stack(np.where(region_mask == 255))
+
+            # Convert to list of (x, y) tuples
+            pixel_list = [(int(x), int(y)) for y, x in pixels]
+            
+            # Extract RGB values for each pixel
+            rgb_values = [self.rgb.getpixel((x, y)) for x, y in pixel_list]
+
+            # Compute average and std RGB
+            avg_rgb = tuple(np.mean(rgb_values, axis=0))
+            std_rgb = np.std(rgb_values, axis=0)
+
+            # Convert RGB values to HSV (normalized to [0, 1])
+            hsv_values = [colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0) for r, g, b in rgb_values]
+
+            # Compute average and std HSV
+            avg_hsv = tuple(np.mean(hsv_values, axis=0))
+            std_hsv = np.std(hsv_values, axis=0)
+
+            # Convert average HSV back to 0–255 scale for S and V
+            avg_hsv_scaled = (avg_hsv[0], avg_hsv[1] * 255, avg_hsv[2] * 255)
+            std_hsv_scaled = (std_hsv[0], std_hsv[1] * 255, std_hsv[2] * 255)
+
+            regions_stats.append({
+                'area': area,
+                'bounding_box': (x, y, w, h),
+                'centroid': (cx, cy),
+                'aspect_ratio': aspect_ratio,
+                'circularity': circularity,
+                'convex_hull_area': hull_area,
+                'solidity': solidity,
+                'eccentricity': eccentricity,
+                'convexity': convexity,
+                'hu_moments': hu_moments,
+                'avg_rgb': avg_rgb,
+                'avg_hsv': avg_hsv_scaled,
+                'std_rgb': std_rgb,
+                'std_hsv': std_hsv_scaled
+            })
+            
+        return regions_stats
+    
+    def save_regions_stats_pickle(self, regions_stats, file_name):
+        """Routine to save the statistics of the regions using pickle.
+
+        Parameters
+        ----------
+        regions_stats : list
+           Each element of the list represent an inclusion and for each inclusions the following informations are reported:
+            area
+            boundary box
+            centroid
+            aspect_ratio
+            circularity
+            convex_hull_area
+            solidity
+            eccentricity
+            convexity
+            hu_moments
+            avg_rgb
+            avg_hsv
+            std_rgb
+            std_hsv
+        file_name : string
+            Name of the file to use.
+        """
         
+        with open(file_name, "wb") as f:
+            pickle.dump(regions_stats, f)
+
+    def save_regions_stats_h5(self, regions_stats, file_name):
+        """Routine to save the statistics of the regions using h5 format.
+
+        Parameters
+        ----------
+        regions_stats : list
+           Each element of the list represent an inclusion and for each inclusions the following informations are reported:
+            area
+            boundary box
+            centroid
+            aspect_ratio
+            circularity
+            convex_hull_area
+            solidity
+            eccentricity
+            convexity
+            hu_moments
+            avg_rgb
+            avg_hsv
+            std_rgb
+            std_hsv
+        file_name : string
+            Name of the file to use.
+        """
+        
+        with h5py.File(file_name, "w") as h5f:
+            for i, region in enumerate(regions_stats):
+                grp = h5f.create_group(f"region_{i+1}")
+                for key, value in region.items():
+                    if isinstance(value, (list, tuple)):
+                        grp.create_dataset(key, data=np.array(value))
+                    else:
+                        grp.attrs[key] = value
+
 
 # Class for creating the dialog to set up the parameters for the tool pick color
 class PickColorDialog(tk.Toplevel):
