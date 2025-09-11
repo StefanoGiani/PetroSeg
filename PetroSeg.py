@@ -2011,6 +2011,7 @@ class PetroSeg:
             filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp *.gif")]
         )
         if file_path:
+            self.canvas.config(cursor="watch")
             self.project = ProjectData(image_path = file_path)
             self.change_status(STATUS_IMAGE_LOADED)
             self.zoom_level = 1.0
@@ -2019,6 +2020,7 @@ class PetroSeg:
             self.update_image_size_status(self.project.size)
             self.change_status_tool(STATUS_TOOL_NONE)
             self.change_status_display(STATUS_DISPLAY_IMAGE)
+            self.canvas.config(cursor="arrow")
             
     
     def update_image_size_status(self, size):
@@ -2088,8 +2090,9 @@ class PetroSeg:
                             upper[2] = bri + self.pick_color_params['V']
                         else:
                             upper[2] = 255
-
+                        self.canvas.config(cursor="watch")
                         self.project.select_color_hsv(lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
+                        self.canvas.config(cursor="arrow")
                     elif self.pick_color_params['mode'] == 'RGB':
                         # Get the color at the clicked point
                         red, green, blue = self.project.rgb.getpixel((x, y))
@@ -2121,8 +2124,9 @@ class PetroSeg:
                             upper[2] = blue + self.pick_color_params['B']
                         else:
                             upper[2] = 255
-
+                        self.canvas.config(cursor="watch")
                         self.project.select_color_rgb(lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
+                        self.canvas.config(cursor="arrow")
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -2139,13 +2143,15 @@ class PetroSeg:
                     if self.pick_region_params['mode'] == 'HSV':
                         lower = (self.pick_region_params['H'], self.pick_region_params['S'], self.pick_region_params['V'])
                         upper = (self.pick_region_params['H'], self.pick_region_params['S'], self.pick_region_params['V'])
-                        
+                        self.canvas.config(cursor="watch")
                         self.project.select_region_hsv((x, y), lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
+                        self.canvas.config(cursor="arrow")
                     elif self.pick_region_params['mode'] == 'RGB':
                         lower = (self.pick_region_params['R'], self.pick_region_params['G'], self.pick_region_params['B'])
                         upper = (self.pick_region_params['R'], self.pick_region_params['G'], self.pick_region_params['B'])
-
+                        self.canvas.config(cursor="watch")
                         self.project.select_region_rgb((x, y), lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
+                        self.canvas.config(cursor="arrow")
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -2159,7 +2165,9 @@ class PetroSeg:
                 x, y = int(canvas_x / self.zoom_level), int(canvas_y / self.zoom_level)
                 width, height = self.project.size
                 if 0 <= x < width and 0 <= y < height:
+                    self.canvas.config(cursor="watch")
                     self.project.deselect_region((x, y))
+                    self.canvas.config(cursor="arrow")
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -2203,8 +2211,9 @@ class PetroSeg:
                             upper[2] = bri + self.pick_color_params['V']
                         else:
                             upper[2] = 255
-
+                        self.canvas.config(cursor="watch")
                         self.project.select_color_hsv(lower, upper, COLOR_MASK_NONE, overwrite = self.overwrite_flag.get())
+                        self.canvas.config(cursor="arrow")
                     elif self.pick_color_params['mode'] == 'RGB':
                         # Get the color at the clicked point
                         red, green, blue = self.project.rgb.getpixel((x, y))
@@ -2236,8 +2245,9 @@ class PetroSeg:
                             upper[2] = blue + self.pick_color_params['B']
                         else:
                             upper[2] = 255
-
+                        self.canvas.config(cursor="watch")
                         self.project.select_color_rgb(lower, upper, COLOR_MASK_NONE, overwrite = self.overwrite_flag.get())
+                        self.canvas.config(cursor="arrow")
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -2382,7 +2392,9 @@ class PetroSeg:
                 x2 = int(max(self.start_x, end_x) / self.zoom_level)
                 y2 = int(max(self.start_y, end_y) / self.zoom_level)
 
+                self.canvas.config(cursor="watch")
                 self.project.crop_image(x1, y1, x2, y2)
+                self.canvas.config(cursor="arrow")
                 self.zoom_level = 1.0
                 self.display_image()
                 self.update_image_size_status(self.project.size)
@@ -2398,7 +2410,9 @@ class PetroSeg:
                 x2 = int(max(self.start_x, end_x) / self.zoom_level)
                 y2 = int(max(self.start_y, end_y) / self.zoom_level)
 
+                self.canvas.config(cursor="watch")
                 self.project.mask_rectangle((x1, y1), (x2, y2), self.current_mask_color, overwrite = self.overwrite_flag.get())
+                self.canvas.config(cursor="arrow")
                 self.display_image()
                 self.file_menu.entryconfig("Save Project", state="normal")
                 self.update_undo_redo()
@@ -2411,7 +2425,9 @@ class PetroSeg:
                 x2 = int(max(self.start_x, end_x) / self.zoom_level)
                 y2 = int(max(self.start_y, end_y) / self.zoom_level)
 
+                self.canvas.config(cursor="watch")
                 self.project.unmask_rectangle((x1, y1), (x2, y2))
+                self.canvas.config(cursor="arrow")
                 self.display_image()
                 self.file_menu.entryconfig("Save Project", state="normal")
                 self.update_undo_redo()
@@ -2833,15 +2849,19 @@ class PetroSeg:
             file_path = filedialog.asksaveasfilename(defaultextension=".prj",
                                                 filetypes=[("Project files", "*.prj"), ("All files", "*.*")])
             if file_path:
+                self.canvas.config(cursor="watch")
                 self.project.saved = True
                 self.project.save(file_path)
                 self.file_menu.entryconfig("Save Project", state="disabled")
                 self.change_status_tool(STATUS_TOOL_NONE)
+                self.canvas.config(cursor="arrow")
         else:
+            self.canvas.config(cursor="watch")
             self.project.saved = True
             self.project.save(self.project.project_file)
             self.file_menu.entryconfig("Save Project", state="disabled")
             self.change_status_tool(STATUS_TOOL_NONE)
+            self.canvas.config(cursor="arrow")
         self.file_menu.entryconfig("Save Project", state="disabled")
 
     def save_as_project(self):
@@ -2849,10 +2869,12 @@ class PetroSeg:
         file_path = filedialog.asksaveasfilename(defaultextension=".prj",
                                             filetypes=[("Project files", "*.prj"), ("All files", "*.*")])
         if file_path:
+            self.canvas.config(cursor="watch")
             self.project.saved = True
             self.project.save(file_path)
             self.file_menu.entryconfig("Save Project", state="disabled")
             self.change_status_tool(STATUS_TOOL_NONE)
+            self.canvas.config(cursor="arrow")
         self.file_menu.entryconfig("Save Project", state="disabled")
 
     def load_project(self):
@@ -2869,6 +2891,7 @@ class PetroSeg:
             filetypes=[("Project File", "*.prj")]
         )
         if file_path:
+            self.canvas.config(cursor="watch")
             self.project = ProjectData(project_path = file_path, clear_stack_flag = True)
             if self.project.rgb is not None:
                 self.change_status(STATUS_IMAGE_LOADED)
@@ -2876,6 +2899,7 @@ class PetroSeg:
                 self.change_status_display(STATUS_DISPLAY_IMAGE)
                 self.display_image()
                 self.update_image_size_status(self.project.size)
+            self.canvas.config(cursor="arrow")
 
         self.file_menu.entryconfig("Save Project", state="disabled")
 
@@ -3200,10 +3224,12 @@ class PetroSeg:
                     messagebox.showerror("Conversion value not set", f"The conversion value for {self.find_regions_params['area_unit']} is not set.")
                     return
                 
+            self.canvas.config(cursor="watch")
             self.project.find_regions(self.current_mask_color, range_color, self.find_regions_params['mode'], self.find_regions_params['edge_threshold1'],
                         self.find_regions_params['edge_threshold2'], self.find_regions_params['area_min_px'], self.find_regions_params['area_max_px'],
                         self.find_regions_params['ratio_threshold'] , contour_retrieval=cv2.RETR_TREE,
                         approximation=cv2.CHAIN_APPROX_SIMPLE, overwrite = self.overwrite_flag.get())
+            self.canvas.config(cursor="arrow")
             self.update_undo_redo()
             self.file_menu.entryconfig("Save Project", state="normal")
             self.display_image()
@@ -3325,7 +3351,9 @@ class PetroSeg:
                 range_color = [[values['min R'], values['min G'], values['min B']],
                                [values['max R'], values['max G'], values['max B']]]
                 
+            self.canvas.config(cursor="watch")
             self.project.color_range(self.current_mask_color, range_color, self.color_range_params['mode'], overwrite = self.overwrite_flag.get())
+            self.canvas.config(cursor="arrow")
             self.update_undo_redo()
             self.file_menu.entryconfig("Save Project", state="normal")
             self.display_image()
@@ -3438,17 +3466,23 @@ class PetroSeg:
         else:
             popup = CustomPopupMaskConsistency(self.root)
             if popup.choice == 'Background':
+                self.canvas.config(cursor="watch")
                 self.project.select_color_mask(COLOR_MASK_NONE, COLOR_MASK_NONE, COLOR_MASK_BACKGROUND, overwrite = False)
+                self.canvas.config(cursor="arrow")
                 self.update_undo_redo()
                 self.file_menu.entryconfig("Save Project", state="normal")
                 self.display_image()
             elif popup.choice == 'Matrix':
+                self.canvas.config(cursor="watch")
                 self.project.select_color_mask(COLOR_MASK_NONE, COLOR_MASK_NONE, COLOR_MASK_MATRIX, overwrite = False)
+                self.canvas.config(cursor="arrow")
                 self.update_undo_redo()
                 self.file_menu.entryconfig("Save Project", state="normal")
                 self.display_image()
             elif popup.choice == 'Inclusions':
+                self.canvas.config(cursor="watch")
                 self.project.select_color_mask(COLOR_MASK_NONE, COLOR_MASK_NONE, COLOR_MASK_INCLUSION, overwrite = False)
+                self.canvas.config(cursor="arrow")
                 self.update_undo_redo()
                 self.file_menu.entryconfig("Save Project", state="normal")
                 self.display_image()
