@@ -31,6 +31,7 @@ Edit - Commands to edit the image.
 
 Image - Commands related to images.
 	Export Image... - Save the current image to disk.
+	Create Tiles... - Dialogue to create tiles from the image and the mask.
 	Crop - Crop the current image.
 	Pick Color - Pick a color to add a region to the mask.
 	Unpick Color - Unpick a color to remove a region from the mask.
@@ -55,7 +56,7 @@ Mask - Commands to select what to mark on the Mask
 	Background - Set to select the background region.
 	Matrix - Set to select the matrix region.
 	Inclusion - Set to select the inclusion region.
-
+	Export Statistics... - Dialogue to export the statistics of the unclusions.
 Concepts:
 ----------
 

@@ -41,10 +41,9 @@
 # TODO:
 # 1. Very slow to work with images. Add timeglass animation when something is done.
 # 2. Try to speed up image processing for large images.
-# 3. Add code to split into small cropped images.
 
-# 4. Consider to not reset history.
-# 5. Better debugging for history using window to display stack.
+# 3. Consider to not reset history.
+# 4. Better debugging for history using window to display stack.
 
 # Author Stefano Giani
 
@@ -58,6 +57,7 @@ import math
 import matplotlib.pyplot as plt
 import colorsys
 import h5py
+import os
 
 # Stati of the app:
 STATUS_NONE = 0 # Just started 
@@ -904,6 +904,45 @@ class ProjectData:
                         grp.create_dataset(key, data=np.array(value))
                     else:
                         grp.attrs[key] = value
+                        
+    def create_tiles(self, tile_width, tile_height, overlap_x, overlap_y, tiles_name, output_dir):
+        """Routine to create tiles from the pair image and mask.
+        Tiles are named as {tiles_name}_{tile_count}.png.
+        Masks for the tiles are named {tiles_name}_mask_{tile_count}.png.
+
+        Parameters
+        ----------
+        tile_width : integer
+            Horizontal dimension to the tiles.
+        tile_height : integer
+            Vertical dimension to the tiles.
+        overlap_x : integer
+            Number of pixels of the horizontal overlay of tiles
+        overlap_y : integer
+            Number of pixels of the vertical overlay of tiles
+        tiles_name : string
+            Root name for the tiles.
+        output_dir : string
+            Folder where to save the tiles and masks.
+        """
+
+        step_x = tile_width - overlap_x
+        step_y = tile_height - overlap_y
+
+        tile_count = 0
+        for y in range(0, self.size[1] - tile_height + 1, step_y):
+            for x in range(0, self.size[0] - tile_width + 1, step_x):
+                box = (x, y, x + tile_width, y + tile_height)
+                tile = self.rgb.crop(box)
+                tile.save(os.path.join(output_dir, f"{tiles_name}_{tile_count}.png"))
+                
+                mask_array = self.mask[y:y + tile_height, x:x + tile_width]
+                mask_image = Image.fromarray(mask_array)
+                mask_image.save(os.path.join(output_dir, f"{tiles_name}_mask_{tile_count}.png"))
+
+                tile_count += 1
+
+        print(f"Created {tile_count} tiles in '{output_dir}' directory.")
 
 
 # Class for creating the dialog to set up the parameters for the tool pick color
@@ -1916,6 +1955,7 @@ class PetroSeg:
         self.overwrite_flag = tk.BooleanVar(value=False)
         self.image_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.image_menu.add_command(label="Export Image...", command=self.export_image)
+        self.image_menu.add_command(label="Create Tiles...", command=self.create_tiles)
         self.image_menu.add_separator()
         self.image_menu.add_checkbutton(label="Crop", command=self.crop_tool, variable=self.crop_flag)
         self.image_menu.add_checkbutton(label="Pick Color", command=self.pick_color_tool, variable=self.pick_color_flag)
@@ -1949,6 +1989,8 @@ class PetroSeg:
         self.mask_menu.add_checkbutton(label="Inclusion", command=self.set_inclusion, variable=self.inclusion_flag)
         self.mask_menu.add_checkbutton(label="Overwrite", variable=self.overwrite_flag)
         self.mask_menu.add_command(label="Check Consistency...", command=self.check_consistency)
+        self.mask_menu.add_separator()
+        self.mask_menu.add_command(label="Export Statistics...", command=self.export_statistics)
         self.menu_bar.add_cascade(label="Mask", menu=self.mask_menu)
         # Help Menu
         self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
@@ -1960,6 +2002,7 @@ class PetroSeg:
         # Init entries in menus
         self.file_menu.entryconfig("Save Project", state="disabled")
         self.image_menu.entryconfig("Export Image...", state="disabled")
+        self.image_menu.entryconfig("Create Tiles...", state="disabled")
         self.edit_menu.entryconfig("Zoom in", state="disabled")
         self.edit_menu.entryconfig("Zoom out", state="disabled")
         self.edit_menu.entryconfig("Undo", state="disabled")
@@ -1988,6 +2031,7 @@ class PetroSeg:
         self.mask_menu.entryconfig("Inclusion", state="disabled")
         self.mask_menu.entryconfig("Overwrite", state="disabled")
         self.mask_menu.entryconfig("Check Consistency...", state="disabled")
+        self.mask_menu.entryconfig("Export Statistics...", state="disabled")
         
         # Status bar at the bottom of the window
         self.status_frame = tk.Frame(root, bd=1, relief=tk.SUNKEN)
@@ -2691,6 +2735,7 @@ class PetroSeg:
                 self.image_menu.entryconfig("Pick Color", state="normal")
                 self.image_menu.entryconfig("Unpick Color", state="normal")
                 self.image_menu.entryconfig("Export Image...", state="normal")
+                self.image_menu.entryconfig("Create Tiles...", state="normal")
                 self.image_menu.entryconfig("Pick Color Dialog...", state="normal")
                 self.image_menu.entryconfig("Pick Region", state="normal")
                 self.image_menu.entryconfig("Unpick Region", state="normal")
@@ -2712,6 +2757,7 @@ class PetroSeg:
                 self.mask_menu.entryconfig("Inclusion", state="normal")
                 self.mask_menu.entryconfig("Overwrite", state="normal")
                 self.mask_menu.entryconfig("Check Consistency...", state="normal")
+                self.mask_menu.entryconfig("Export Statistics...", state="normal")
                 self.reset_ruler()
                 self.canvas.bind("<ButtonPress-1>", self.start_drag)
                 self.canvas.bind("<B1-Motion>", self.do_drag)
@@ -3440,7 +3486,7 @@ class PetroSeg:
                     color = "blue"
                     title = "Blue Histogram"
                 else:
-                    messagebox.showwarning("Error", "Channel not recognised.")
+                    messagebox.showerror("Error", "Channel not recognised.")
                     return
                 channel = img_tmp[:, :, channel_index]
                 plt.figure()
@@ -3464,7 +3510,7 @@ class PetroSeg:
                     title = "Value Histogram"
                     max_value = 256
                 else:
-                    messagebox.showwarning("Error", "Channel not recognised.")
+                    messagebox.showerror("Error", "Channel not recognised.")
                     return
                 channel = self.project.hsv[:, :, channel_index]
                 plt.figure()
@@ -3475,7 +3521,7 @@ class PetroSeg:
                 plt.grid(True)
                 plt.show()
             else:
-                messagebox.showwarning("Error", "Mode not recognised.")
+                messagebox.showerror("Error", "Mode not recognised.")
                 return
     def show_h_histogram(self):
         """Routine to show the H histogram"""
@@ -3669,7 +3715,103 @@ class PetroSeg:
                 self.update_undo_redo()
                 self.file_menu.entryconfig("Save Project", state="normal")
                 self.display_image()
+                
+    def export_statistics(self):
+        """Routine to export statistics of the inclusions ot file.
+        """
+        if not self.project.check_mask_consistency():
+            messagebox.showwarning("Warning", "Not all the pixels in the mask are assigned to classes.")
+            
+        self.canvas.config(cursor="watch")
+        regions = self.project.extract_regions(COLOR_MASK_INCLUSION)
+        self.canvas.config(cursor="arrow")
+        file_path = filedialog.asksaveasfilename(defaultextension=".h5",
+                                                filetypes=[("H5", "*.h5"), ("Pickle", "*.pkl"), ("All files", "*.*")])
+        extension = os.path.splitext(file_path)[1]
+        if extension == '.h5':
+            self.canvas.config(cursor="watch")
+            self.project.save_regions_stats_h5(regions, file_path)
+            self.canvas.config(cursor="arrow")
+        elif extension == '.pkl':
+            self.canvas.config(cursor="watch")
+            self.project.save_regions_stats_pickle(regions, file_path)
+            self.canvas.config(cursor="arrow")
+        else:
+            messagebox.showerror("Error", "Extension not recognised")
+    
+    def create_tiles(self):
+        if not self.project.check_mask_consistency():
+            messagebox.showwarning("Warning", "Not all the pixels in the mask are assigned to classes.")
+        
+        dialog = tk.Toplevel(root)
+        dialog.title("Tile Parameters Input")
+        
+        def choose_output_dir():
+            selected_dir = filedialog.askdirectory()
+            if selected_dir:
+                entry_output_dir.delete(0, tk.END)
+                entry_output_dir.insert(0, selected_dir)
 
+        def submit():
+            try:
+                tile_width = int(entry_tile_width.get())
+                tile_height = int(entry_tile_height.get())
+                overlap_x = int(entry_overlap_x.get())
+                overlap_y = int(entry_overlap_y.get())
+                tiles_name = entry_tiles_name.get()
+                output_dir = entry_output_dir.get()
+
+                # Validation
+                if tile_width > self.project.size[0]:
+                    raise ValueError("Tile width exceeds image width.")
+                if tile_height > self.project.size[1]:
+                    raise ValueError("Tile height exceeds image height.")
+                if overlap_x >= tile_width:
+                    raise ValueError("Horizontal overlap must be less than tile width.")
+                if overlap_y >= tile_height:
+                    raise ValueError("Vertical overlap must be less than tile height.")
+                if not tiles_name:
+                    raise ValueError("Tiles name cannot be empty.")
+                if not output_dir:
+                    raise ValueError("Output directory cannot be empty.")
+
+                self.canvas.config(cursor="watch")
+                self.project.create_tiles(tile_width, tile_height, overlap_x, overlap_y, tiles_name, output_dir)
+                self.canvas.config(cursor="arrow")
+                
+                dialog.destroy()
+            except ValueError as e:
+                messagebox.showerror("Input Error", str(e))
+
+        # Create and place labels and entry widgets
+        tk.Label(dialog, text="Tile Width:").grid(row=0, column=0)
+        entry_tile_width = tk.Entry(dialog)
+        entry_tile_width.grid(row=0, column=1)
+
+        tk.Label(dialog, text="Tile Height:").grid(row=1, column=0)
+        entry_tile_height = tk.Entry(dialog)
+        entry_tile_height.grid(row=1, column=1)
+
+        tk.Label(dialog, text="Horizontal Overlap:").grid(row=2, column=0)
+        entry_overlap_x = tk.Entry(dialog)
+        entry_overlap_x.grid(row=2, column=1)
+
+        tk.Label(dialog, text="Vertical Overlap:").grid(row=3, column=0)
+        entry_overlap_y = tk.Entry(dialog)
+        entry_overlap_y.grid(row=3, column=1)
+
+        tk.Label(dialog, text="Tiles Name:").grid(row=4, column=0)
+        entry_tiles_name = tk.Entry(dialog)
+        entry_tiles_name.grid(row=4, column=1)
+
+        # Output Directory
+        tk.Label(dialog, text="Output Directory:").grid(row=5, column=0)
+        entry_output_dir = tk.Entry(dialog)
+        entry_output_dir.grid(row=5, column=1)
+        tk.Button(dialog, text="Browse", command=choose_output_dir).grid(row=5, column=2)
+
+        # Submit button
+        tk.Button(dialog, text="Submit", command=submit).grid(row=6, column=0, columnspan=2)
 
 # Run the app
 root = tk.Tk()
