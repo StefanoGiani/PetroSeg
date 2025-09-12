@@ -2,3 +2,4 @@ pillow
 numpy
 opencv-python
 matplotlib
+h5py

@@ -942,7 +942,6 @@ class ProjectData:
 
                 tile_count += 1
 
-        print(f"Created {tile_count} tiles in '{output_dir}' directory.")
 
 
 # Class for creating the dialog to set up the parameters for the tool pick color
