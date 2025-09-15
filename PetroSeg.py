@@ -39,13 +39,15 @@
 # 1, 2, 3 Switch from image, to mask and to blend of image and mask.
 
 # TODO:
-# 1. Very slow to work with images. Add timeglass animation when something is done.
-# 2. Try to speed up image processing for large images.
+# 1. When a tool that can be used several times in a row loke pick region is used, the cross cursor disappears after the first application.
+# 2. Cerate filter to filter out already creted regions accoring to characteristics.
+# 3. Very slow to work with images. Add timeglass animation when something is done.
+# 4. Try to speed up image processing for large images.
 
-# 3. Consider to not reset history.
-# 4. Better debugging for history using window to display stack.
+# 5. Consider to not reset history.
+# 6. Better debugging for history using window to display stack.
 
-# Author Stefano Giani
+# Authors Lucy Standish and Stefano Giani
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -58,6 +60,9 @@ import matplotlib.pyplot as plt
 import colorsys
 import h5py
 import os
+
+# Debugging flags:
+CONSOLE_DEBUG = True # Flag to activate debugging information in consol
 
 # Stati of the app:
 STATUS_NONE = 0 # Just started 
@@ -88,7 +93,7 @@ COLOR_MASK_INCLUSION = (0,255,0)
 
 # Class to contain the data for the projecy
 class ProjectData:
-    def __init__(self, project_path = None, image_path = None, clear_stack_flag = False ):
+    def __init__(self, project_path = None, image_path = None, clear_stack_flag = False, console_debug = False ):
         """Constructor.
         It can be called with no parameters to create an empty project, 
         or it can be called passing either a path of an image file or a
@@ -102,7 +107,10 @@ class ProjectData:
             Path to the file containing the image to open.
         clear_stack_flag : logical
             Flag to clear the stack of actions for the loaded project, by default False.
+        console_debug : logical
+            Flag to output debugging information to the console, by default False.
         """
+        self.console_debug = console_debug
         if image_path is not None:
         
             self.rgb = Image.open(image_path).convert('RGB')
@@ -133,13 +141,26 @@ class ProjectData:
             self.project_file = None
             self.unit = "px"
             self.conversion_factors = {"px": 1.0, "cm": None, "mm": None, "in": None}
+        if self.console_debug:
+            self.console_debug_stack_actions()
+
+    def console_debug_stack_actions(self):
+        print('cursor_stack_action:',self.cursor_stack_action)
+        for i in range(len(self.stack_actions)):
+            if i == self.cursor_stack_action:
+                print('---> action: ', self.stack_actions[i]["action"])
+            else:
+                print('     action: ', self.stack_actions[i]["action"])
+        print('----------------------------------------------')
             
     def snapshot(self):
         """Take a snapshot of the current object."""
-        
+        self.truncate_stack()
         self.stack_actions.append({"action": "Snapshot()", "saved": self.saved, "size": self.size, "rgb": self.rgb.copy(), "hsv": self.hsv.copy(), 
                                        "mask":self.mask.copy()})
         self.cursor_stack_action += 1
+        if self.console_debug:
+                self.console_debug_stack_actions()
 
     def save(self, project_path):
         """Routine to save the project to file.
@@ -191,6 +212,8 @@ class ProjectData:
             self.clear_stack()
             self.snapshot()
         self.saved = True
+        if self.console_debug:
+                self.console_debug_stack_actions()
 
 
     def select_color_hsv(self, lower, upper, color, overwrite = True):
@@ -217,7 +240,10 @@ class ProjectData:
             condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (mask == 255)
             self.mask[condition] = color
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "SelectColorHSV(" + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
         
     def select_color_rgb(self, lower, upper, color, overwrite = True):
         """Select a region in the mask based on range in RGB colors.
@@ -243,7 +269,10 @@ class ProjectData:
             condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (mask == 255)
             self.mask[condition] = color
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "SelectColorRGB(" + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
         
     def select_region_hsv(self, point, lower, upper, color, overwrite = True):
         """Select a connected region in the mask using HSV.
@@ -303,7 +332,10 @@ class ProjectData:
 
         self.mask[condition] = color
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "SelectRegionHSV(" + str(point) + "," + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite)  + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
         
     def select_region_rgb(self, point, lower, upper, color, overwrite = True):
         """Select a connected region in the mask using RGB.
@@ -336,7 +368,10 @@ class ProjectData:
 
         self.mask[condition] = color
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "SelectRegionRGB(" + str(point) + "," + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
         
     def deselect_region(self, point):
         """Deselect a connected region in the mask.
@@ -357,7 +392,10 @@ class ProjectData:
 
         self.mask[condition] = (0,0,0)
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "DeselectRegion(" + str(point) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
         
 
     def truncate_stack(self):
@@ -365,8 +403,10 @@ class ProjectData:
 
         This can be used when an action is performed on the data and the remaining redo actions are no longer applicable.
         """
-        if self.cursor_stack_action > 0:
+        if self.cursor_stack_action >= 0:
             del self.stack_actions[self.cursor_stack_action+1:]
+        if self.console_debug:
+                self.console_debug_stack_actions()
             
     def clear_stack(self):
         """Claer the stack of actions.
@@ -374,6 +414,8 @@ class ProjectData:
         """
         self.cursor_stack_action = -1
         self.stack_actions = []
+        if self.console_debug:
+                self.console_debug_stack_actions()
 
     def crop_image(self, x1, y1, x2, y2):
         """Routine to crop an image using coordinates of opposite vertices of a rectangle.
@@ -408,8 +450,11 @@ class ProjectData:
         self.mask = self.mask[y1:y2, x1:x2, :]
         self.size = self.rgb.size
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "CropImage(" + str(x1) + "," + str(y1) + "," +  str(x2) + "," +  str(y2) + ")", "saved": self.saved, 
                                    "size": self.size, "rgb": self.rgb.copy(), "hsv": self.hsv.copy(), "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
         
 
     def undo(self):
@@ -430,6 +475,9 @@ class ProjectData:
                 self.hsv = self.stack_actions[self.cursor_stack_action]["hsv"]
             if "mask" in self.stack_actions[self.cursor_stack_action].keys():
                 self.mask = self.stack_actions[self.cursor_stack_action]["mask"]
+
+        if self.console_debug:
+                self.console_debug_stack_actions()
             
         
     def redo(self):
@@ -447,6 +495,9 @@ class ProjectData:
                 self.hsv = self.stack_actions[self.cursor_stack_action]["hsv"]
             if "mask" in self.stack_actions[self.cursor_stack_action].keys():
                 self.mask = self.stack_actions[self.cursor_stack_action]["mask"]
+
+        if self.console_debug:
+                self.console_debug_stack_actions()
 
     def is_undo(self):
         """Routine to check if there are actions in the stack that can be undo.
@@ -479,7 +530,7 @@ class ProjectData:
     def find_regions(self, mask_color, range_color, color_encoding='RGB', edge_threshold1=100,
                         edge_threshold2=200, min_area=1, max_area=1000,
                         ratio_threshold=0.8, contour_retrieval=cv2.RETR_TREE,
-                        approximation=cv2.CHAIN_APPROX_SIMPLE, preview=None, overwrite = True):
+                        approximation=cv2.CHAIN_APPROX_SIMPLE, preview=None, overwrite = False):
         """Routine to automatically find regions using edges.
 
         Parameters
@@ -517,7 +568,7 @@ class ProjectData:
             "edges" : mask with edges returned.
             "colors" : return mask of selected colors.
         overwrite : logical, optional
-            Control if the non zero values of the mask can be overwritten, by default True.
+            Control if the non zero values of the mask can be overwritten, by default False.
 
         Returns
         -------
@@ -595,12 +646,15 @@ class ProjectData:
             condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (mask_incusions != 0)
             self.mask[condition] = mask_color
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "FindRegions(" + str(mask_color)  + 
                                    "," + str(range_color)  + "," + str(color_encoding)  + 
                                    "," + str(edge_threshold1)  + "," + str(edge_threshold2)  + 
                                    "," + str(min_area)  + "," + str(max_area)  + 
                                    "," + str(ratio_threshold)  + "," + str(contour_retrieval)  + 
                                    "," + str(approximation) + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
                                    
         return inclusion_count   
     
@@ -636,8 +690,11 @@ class ProjectData:
             self.mask[condition] = mask_color
             
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "ColorRange(" + str(mask_color)  + 
                                    "," + str(range_color)  + "," + str(color_encoding) + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
         
     def mask_rectangle(self, start_point, end_point, color, overwrite = True):
         """Select a rectangular region on the mask.
@@ -663,7 +720,10 @@ class ProjectData:
             condition = (mask_copy[:,:,0] == color[0]) & (mask_copy[:,:,1] == color[1]) & (mask_copy[:,:,2] == color[2]) & (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0)
             self.mask[condition] = color
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "MaskRectangle(" + str(start_point) + "," + str(end_point) + "," + str(color) + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
                   
     def unmask_rectangle(self, start_point, end_point):
         """Deselect a rectangular region on the mask.
@@ -679,7 +739,10 @@ class ProjectData:
         
         cv2.rectangle(self.mask, start_point, end_point, (0,0,0), thickness=-1)
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "UnmaskRectangle(" + str(start_point) + "," + str(end_point) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
                   
     def check_mask_consistency(self):
         """Routine to check if in the mask there are still pixels not associated to a class.
@@ -720,10 +783,13 @@ class ProjectData:
             condition = (self.mask[:,:,0] == 0) & (self.mask[:,:,1] == 0) & (self.mask[:,:,2] == 0) & (mask == 255)
             self.mask[condition] = color
         self.saved = False
+        self.truncate_stack()
         self.stack_actions.append({"action": "SelectColorMask(" + str(lower) + "," + str(upper)  + "," + str(color)  + "," + str(overwrite) + ")", "saved": self.saved, "mask": self.mask.copy()})
+        if self.console_debug:
+                self.console_debug_stack_actions()
         
     def extract_regions(self, color):
-        """_summary_
+        """Routine to compute statistics of the inclusions.
 
         Parameters
         ----------
@@ -824,22 +890,24 @@ class ProjectData:
             avg_hsv_scaled = (avg_hsv[0], avg_hsv[1] * 255, avg_hsv[2] * 255)
             std_hsv_scaled = (std_hsv[0], std_hsv[1] * 255, std_hsv[2] * 255)
 
-            regions_stats.append({
-                'area': area,
-                'bounding_box': (x, y, w, h),
-                'centroid': (cx, cy),
-                'aspect_ratio': aspect_ratio,
-                'circularity': circularity,
-                'convex_hull_area': hull_area,
-                'solidity': solidity,
-                'eccentricity': eccentricity,
-                'convexity': convexity,
-                'hu_moments': hu_moments,
-                'avg_rgb': avg_rgb,
-                'avg_hsv': avg_hsv_scaled,
-                'std_rgb': std_rgb,
-                'std_hsv': std_hsv_scaled
-            })
+            # Discard regions with area 0
+            if area > 0:
+                regions_stats.append({
+                    'area': area,
+                    'bounding_box': (x, y, w, h),
+                    'centroid': (cx, cy),
+                    'aspect_ratio': aspect_ratio,
+                    'circularity': circularity,
+                    'convex_hull_area': hull_area,
+                    'solidity': solidity,
+                    'eccentricity': eccentricity,
+                    'convexity': convexity,
+                    'hu_moments': hu_moments,
+                    'avg_rgb': avg_rgb,
+                    'avg_hsv': avg_hsv_scaled,
+                    'std_rgb': std_rgb,
+                    'std_hsv': std_hsv_scaled
+                })
             
         return regions_stats
     
@@ -1110,7 +1178,7 @@ class PickColorDialog(tk.Toplevel):
         
 # Class for creating the dialog to set up the parameters for finding the regions
 class FindRegionsDialog(tk.Toplevel):
-    def __init__(self, parent, callback, project_data, initial_values=None):
+    def __init__(self, parent, callback, project_data, initial_values=None, overwrite_flag = False):
         """Constructor.
 
         Parameters
@@ -1123,6 +1191,8 @@ class FindRegionsDialog(tk.Toplevel):
             Project data object.
         initial_values : dictionary, optional
             Initialisation value for the parameters, by default None
+        overwrite_flag : logical, optional
+            Flag to let the regions overwrite existing mask, by default False
         """
         super().__init__(parent)
         self.title("Find Regions Dialogue")
@@ -1130,6 +1200,7 @@ class FindRegionsDialog(tk.Toplevel):
         self.resizable(False, False)
         self.callback = callback
         self.project_data = project_data
+        self.overwrite_flag = overwrite_flag
 
         # Parameter names and range
         self.params = {
@@ -1524,7 +1595,7 @@ class FindRegionsDialog(tk.Toplevel):
         if self.validate(): 
             edges = self.project_data.find_regions(None, None, "RGB", self.edge_min.get(),
                         self.edge_max.get(), None, None,
-                        None , preview="edges", overwrite = self.overwrite_flag.get())
+                        None , preview="edges", overwrite = self.overwrite_flag)
             cv2.imshow('edges',edges)
             cv2.waitKey(0)
             
@@ -1540,7 +1611,7 @@ class FindRegionsDialog(tk.Toplevel):
                                [int(self.entries['max R'].get()), int(self.entries['max G'].get()), int(self.entries['max B'].get())]]
             colors = self.project_data.find_regions(None, range_color, self.mode.get(), None,
                         None, None, None,
-                        None , preview="colors", overwrite = self.overwrite_flag.get())
+                        None , preview="colors", overwrite = self.overwrite_flag)
             cv2.imshow('colors',colors)
             cv2.waitKey(0)
         
@@ -1827,7 +1898,7 @@ class PetroSeg:
         self.show_splash(root, "dice.jpeg", duration=3000)
 
         self.zoom_level = 1.0 # Level of Zoom
-        self.project = ProjectData()
+        self.project = ProjectData(console_debug = CONSOLE_DEBUG)
 
         # Init initial status app
         self.status = STATUS_NONE
@@ -2226,11 +2297,11 @@ class PetroSeg:
             if result is True:
                 self.save_project()
                 if self.project.saved:
-                    self.project = ProjectData()
+                    self.project = ProjectData(console_debug = CONSOLE_DEBUG)
                 else:
                     return
             elif result is False:
-                self.project = ProjectData()
+                self.project = ProjectData(console_debug = CONSOLE_DEBUG)
         
         
         file_path = filedialog.askopenfilename(
@@ -2238,7 +2309,7 @@ class PetroSeg:
         )
         if file_path:
             self.canvas.config(cursor="watch")
-            self.project = ProjectData(image_path = file_path)
+            self.project = ProjectData(image_path = file_path, console_debug = CONSOLE_DEBUG)
             self.change_status(STATUS_IMAGE_LOADED)
             self.zoom_level = 1.0
             self.change_status_display(STATUS_DISPLAY_IMAGE)
@@ -3120,7 +3191,7 @@ class PetroSeg:
         )
         if file_path:
             self.canvas.config(cursor="watch")
-            self.project = ProjectData(project_path = file_path, clear_stack_flag = True)
+            self.project = ProjectData(project_path = file_path, clear_stack_flag = True, console_debug = CONSOLE_DEBUG)
             if self.project.rgb is not None:
                 self.change_status(STATUS_IMAGE_LOADED)
                 self.zoom_level = 1.0
@@ -3392,7 +3463,7 @@ class PetroSeg:
         if self.project.conversion_factors["in"] is not None:
             self.find_regions_params["units"].append("in²")
             
-        dialog = FindRegionsDialog(self.root, self.find_regions_dialog_receive_values, self.project, self.find_regions_params)
+        dialog = FindRegionsDialog(self.root, self.find_regions_dialog_receive_values, self.project, self.find_regions_params, overwrite_flag=self.overwrite_flag.get())
         dialog.grab_set() # Make the dialog modal
         self.root.wait_window(dialog) # Wait until the dialog is closed
 
@@ -3637,7 +3708,7 @@ class PetroSeg:
         # Add text below the image
         text_frame = tk.Frame(splash, bg="white")
         text_frame.pack(fill="both", expand=True)
-        tk.Label(text_frame, text="Authors: Stefano Giani and Lucy Standish.", bg="white", font=("Arial", 12)).pack(pady=(10, 0))
+        tk.Label(text_frame, text="Authors: Lucy Standish and Stefano Giani.", bg="white", font=("Arial", 12)).pack(pady=(10, 0))
         tk.Label(text_frame, text="License: CC-BY-NC-4.0", bg="white", font=("Arial", 10)).pack()
 
         # Center the splash screen
