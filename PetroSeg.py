@@ -39,13 +39,8 @@
 # 1, 2, 3 Switch from image, to mask and to blend of image and mask.
 
 # TODO:
-# 1. When a tool that can be used several times in a row loke pick region is used, the cross cursor disappears after the first application.
-# 2. Cerate filter to filter out already creted regions accoring to characteristics.
-# 3. Very slow to work with images. Add timeglass animation when something is done.
-# 4. Try to speed up image processing for large images.
-
-# 5. Consider to not reset history.
-# 6. Better debugging for history using window to display stack.
+# 1. Cerate filter to filter out already creted regions accoring to characteristics.
+# 2. Allow to export mask as an image with/without boundary boxes for inclusions.
 
 # Authors Lucy Standish and Stefano Giani
 
@@ -2389,7 +2384,7 @@ class PetroSeg:
                             upper[2] = 255
                         self.canvas.config(cursor="watch")
                         self.project.select_color_hsv(lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
-                        self.canvas.config(cursor="arrow")
+                        self.canvas.config(cursor="cross")
                     elif self.pick_color_params['mode'] == 'RGB':
                         # Get the color at the clicked point
                         red, green, blue = self.project.rgb.getpixel((x, y))
@@ -2423,7 +2418,7 @@ class PetroSeg:
                             upper[2] = 255
                         self.canvas.config(cursor="watch")
                         self.project.select_color_rgb(lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
-                        self.canvas.config(cursor="arrow")
+                        self.canvas.config(cursor="cross")
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -2442,13 +2437,13 @@ class PetroSeg:
                         upper = (self.pick_region_params['H'], self.pick_region_params['S'], self.pick_region_params['V'])
                         self.canvas.config(cursor="watch")
                         self.project.select_region_hsv((x, y), lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
-                        self.canvas.config(cursor="arrow")
+                        self.canvas.config(cursor="cross")
                     elif self.pick_region_params['mode'] == 'RGB':
                         lower = (self.pick_region_params['R'], self.pick_region_params['G'], self.pick_region_params['B'])
                         upper = (self.pick_region_params['R'], self.pick_region_params['G'], self.pick_region_params['B'])
                         self.canvas.config(cursor="watch")
                         self.project.select_region_rgb((x, y), lower, upper, self.current_mask_color, overwrite = self.overwrite_flag.get())
-                        self.canvas.config(cursor="arrow")
+                        self.canvas.config(cursor="cross")
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -2464,7 +2459,7 @@ class PetroSeg:
                 if 0 <= x < width and 0 <= y < height:
                     self.canvas.config(cursor="watch")
                     self.project.deselect_region((x, y))
-                    self.canvas.config(cursor="arrow")
+                    self.canvas.config(cursor="cross")
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()
@@ -2510,7 +2505,7 @@ class PetroSeg:
                             upper[2] = 255
                         self.canvas.config(cursor="watch")
                         self.project.select_color_hsv(lower, upper, COLOR_MASK_NONE, overwrite = self.overwrite_flag.get())
-                        self.canvas.config(cursor="arrow")
+                        self.canvas.config(cursor="cross")
                     elif self.pick_color_params['mode'] == 'RGB':
                         # Get the color at the clicked point
                         red, green, blue = self.project.rgb.getpixel((x, y))
@@ -2544,7 +2539,7 @@ class PetroSeg:
                             upper[2] = 255
                         self.canvas.config(cursor="watch")
                         self.project.select_color_rgb(lower, upper, COLOR_MASK_NONE, overwrite = self.overwrite_flag.get())
-                        self.canvas.config(cursor="arrow")
+                        self.canvas.config(cursor="cross")
                     self.update_undo_redo()
                     self.file_menu.entryconfig("Save Project", state="normal")
                     self.display_image()

@@ -1,2 +1,2 @@
-# Ignore the folder tkinter_env
-tkinter_env/*
+# Ignore the folder venv
+venv/*
