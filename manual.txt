@@ -53,9 +53,13 @@ Image - Commands related to images.
 	Show B Histogram - Histogram for the B channel.
 
 Mask - Commands to select what to mark on the Mask
+    Export Mask... – Saves the current mask to disk.
+    Export Mix... – Saves the current mask overlaid to the image to disk.
 	Background - Set to select the background region.
 	Matrix - Set to select the matrix region.
 	Inclusion - Set to select the inclusion region.
+	Overwrite - Allow for already selected classes on the mask to be overwritten.
+	Check Consistency... - Check that all the pixels in the mask are asigned to a class.
 	Export Statistics... - Dialogue to export the statistics of the unclusions.
 Concepts:
 ----------

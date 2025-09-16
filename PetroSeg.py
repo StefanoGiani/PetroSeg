@@ -2049,6 +2049,9 @@ class PetroSeg:
         self.matrix_flag = tk.BooleanVar(value=False)
         self.inclusion_flag = tk.BooleanVar(value=False)
         self.mask_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.mask_menu.add_checkbutton(label="Export Mask...", command=self.export_mask)
+        self.mask_menu.add_checkbutton(label="Export Mix...", command=self.export_mix)
+        self.mask_menu.add_separator()
         self.mask_menu.add_checkbutton(label="Background", command=self.set_background, variable=self.background_flag)
         self.mask_menu.add_checkbutton(label="Matrix", command=self.set_matrix, variable=self.matrix_flag)
         self.mask_menu.add_checkbutton(label="Inclusion", command=self.set_inclusion, variable=self.inclusion_flag)
@@ -2449,9 +2452,6 @@ class PetroSeg:
                     self.display_image()
             # Code to unpick a region
             elif self.status_tool == STATUS_TOOL_UNPICK_REGION:
-                if self.current_mask_color == COLOR_MASK_NONE:
-                    messagebox.showerror("Error", "No mask class selected.")
-                    return
                 canvas_x = self.canvas.canvasx(event.x)
                 canvas_y = self.canvas.canvasy(event.y)
                 x, y = int(canvas_x / self.zoom_level), int(canvas_y / self.zoom_level)
@@ -2694,6 +2694,9 @@ class PetroSeg:
                 self.update_undo_redo()
                 self.change_status_tool(STATUS_TOOL_NONE)
             elif self.status_tool == STATUS_TOOL_PICK_RECT:
+                if self.current_mask_color == COLOR_MASK_NONE:
+                    messagebox.showerror("Error", "No mask class selected.")
+                    return
                 end_x = self.canvas.canvasx(event.x)
                 end_y = self.canvas.canvasy(event.y)
 
@@ -2772,6 +2775,27 @@ class PetroSeg:
                                                    filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg"), ("All files", "*.*")])
             if file_path:
                 self.project.rgb.save(file_path)
+                self.change_status_tool(STATUS_TOOL_NONE)
+                
+    def export_mask(self):
+        """Routine to save the current mask."""
+        if self.status == STATUS_IMAGE_LOADED:
+            file_path = filedialog.asksaveasfilename(defaultextension=".png",
+                                                   filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg"), ("All files", "*.*")])
+            if file_path:
+                image = Image.fromarray(self.project.mask)
+                image.save(file_path)
+                self.change_status_tool(STATUS_TOOL_NONE)
+                
+    def export_mix(self):
+        """Routine to save the current mask overlaid to the current image."""
+        if self.status == STATUS_IMAGE_LOADED:
+            file_path = filedialog.asksaveasfilename(defaultextension=".png",
+                                                   filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg"), ("All files", "*.*")])
+            if file_path:
+                mask_rgb = Image.fromarray(self.project.mask)
+                mix_rgb = Image.blend(self.project.rgb.convert("RGBA"), mask_rgb.convert("RGBA"), 0.5)
+                mix_rgb.save(file_path)
                 self.change_status_tool(STATUS_TOOL_NONE)
 
     def change_status(self, new_status):
