@@ -55,6 +55,7 @@ import matplotlib.pyplot as plt
 import colorsys
 import h5py
 import os
+from pathlib import Path
 
 # Debugging flags:
 CONSOLE_DEBUG = True # Flag to activate debugging information in consol
@@ -1890,7 +1891,16 @@ class PetroSeg:
         self.root.title("PetroSeg")
         self.root.geometry("512x512")
         
-        self.show_splash(root, "dice.jpeg", duration=3000)
+        
+        # Get the path of the current script
+        script_dir = Path(__file__).resolve().parent
+        
+        
+        # Build the path to splash.png inside the assets folder
+        splash_path = script_dir / "assets" / "splash.png"
+
+
+        self.show_splash(root, splash_path, duration=3000)
 
         self.zoom_level = 1.0 # Level of Zoom
         self.project = ProjectData(console_debug = CONSOLE_DEBUG)

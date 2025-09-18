@@ -49,6 +49,29 @@ Once dependencies are installed, run the app with:
 python PetroSeg.py
 
 
+## Content
+
+**assets/splash.png**
+Image used for the splash screen of the application. It appears when the app starts and provides branding or visual context.
+
+**PetroSeg.py**
+The main entry point of the Python application. Contains the core logic and function calls to run the program.
+
+**README.md**
+This documentation file. It explains the purpose of the repository, how to install and use the software, and other relevant details.
+
+**requirements.txt**
+Lists all Python dependencies needed to run the project. Can be installed using pip install -r requirements.txt.
+
+**License.txt**
+File containing the details about the license.
+
+**CITATION.cff**
+Details on how to cite the software.
+
+**PetroSeg_User_Manual.pdf**
+Manual of the software.
+
 ## License
 
 This project is licensed under the [Creative Commons Attribution-NonCommercial 4.0 International License](https://creativecommons.org/licensest the code for non-commercial and academic purposes, provided that proper attribution is given. Commercial use is not permitted without prior written permission.

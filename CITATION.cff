@@ -4,6 +4,8 @@ title: "PetroSeg"
 version: "1.0.0"
 date-released: 2025-07-31
 authors:
+  - family-names: Standish
+    given-names: Lucy
   - family-names: Giani
     given-names: Stefano
     orcid: "https://orcid.org/0000-0002-8190-9958"  # Optional
