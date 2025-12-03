@@ -7,6 +7,7 @@ Python app to label images of thin sections for segmentation.
 ### 1. Clone the Repository
 
 git https://github.com/StefanoGiani/PetroSeg.git
+
 cd PetroSeg
 
 ### 2. Install Tkinter (if not already installed)
