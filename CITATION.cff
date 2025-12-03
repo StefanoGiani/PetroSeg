@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "PetroSeg"
+version: "1.0.0"
+date-released: 2025-07-31
+authors:
+  - family-names: Standish
+    given-names: Lucy
+  - family-names: Giani
+    given-names: Stefano
+    orcid: "https://orcid.org/0000-0002-8190-9958"  # Optional
+license: CC-BY-NC-4.0
+repository-code: https://github.com/yourusername/your-repo-name
+url: https://github.com/yourusername/your-repo-name
