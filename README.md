@@ -19,7 +19,9 @@ pip install tk
 
 🍎 macOS
 If using Homebrew Python:
+
 brew install python-tk
+
 Or install Python from python.org which includes Tkinter.
 
 🐧 Linux (Ubuntu/Debian)
@@ -29,11 +31,15 @@ sudo apt-get install python3-tk
 Creating a virtual environment helps isolate your app's dependencies.
 
 🪟 Windows (CMD or PowerShell)
+
 python -m venv venv
+
 venv\Scripts\activate
 
 🍎 macOS / 🐧 Linux
+
 python3 -m venv venv
+
 source venv/bin/activate
 
 To deactivate the environment later, just run deactivate.
@@ -47,6 +53,7 @@ pip install -r requirements.txt
 ### 5. Running the App
 
 Once dependencies are installed, run the app with:
+
 python PetroSeg.py
 
 
