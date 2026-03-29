@@ -10,5 +10,5 @@ authors:
     given-names: Stefano
     orcid: "https://orcid.org/0000-0002-8190-9958"  # Optional
 license: CC-BY-NC-4.0
-repository-code: https://github.com/yourusername/your-repo-name
-url: https://github.com/yourusername/your-repo-name
+repository-code: https://github.com/StefanoGiani/PetroSeg
+url: https://github.com/StefanoGiani/PetroSeg
