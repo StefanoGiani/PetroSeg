@@ -10,7 +10,24 @@ git clone https://github.com/StefanoGiani/PetroSeg.git
 
 cd PetroSeg
 
-### 2. Install Tkinter (if not already installed)
+### 2. Create a Virtual Environment (Recommended)
+Creating a virtual environment helps isolate your app's dependencies.
+
+🪟 Windows (CMD or PowerShell)
+
+python -m venv venv
+
+venv\Scripts\activate
+
+🍎 macOS / 🐧 Linux
+
+python3 -m venv venv
+
+source venv/bin/activate
+
+To deactivate the environment later, just run deactivate.
+
+### 3. Install Tkinter (if not already installed)
 
 Tkinter is usually included with Python, but if it's missing, follow the instructions below:
 
@@ -27,22 +44,7 @@ Or install Python from python.org which includes Tkinter.
 🐧 Linux (Ubuntu/Debian)
 sudo apt-get install python3-tk
 
-### 3. Create a Virtual Environment (Recommended)
-Creating a virtual environment helps isolate your app's dependencies.
 
-🪟 Windows (CMD or PowerShell)
-
-python -m venv venv
-
-venv\Scripts\activate
-
-🍎 macOS / 🐧 Linux
-
-python3 -m venv venv
-
-source venv/bin/activate
-
-To deactivate the environment later, just run deactivate.
 
 ### 4. Install Python Dependencies
 

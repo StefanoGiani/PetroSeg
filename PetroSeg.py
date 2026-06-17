@@ -461,39 +461,42 @@ class ProjectData:
         """
         if self.cursor_stack_action > 0:
             self.cursor_stack_action -= 1
-            if "saved" in self.stack_actions[self.cursor_stack_action].keys():
-                self.saved = self.stack_actions[self.cursor_stack_action]["saved"]
-            if "size" in self.stack_actions[self.cursor_stack_action].keys():
-                self.size = self.stack_actions[self.cursor_stack_action]["size"]
-            if "rgb" in self.stack_actions[self.cursor_stack_action].keys():
-                self.rgb = self.stack_actions[self.cursor_stack_action]["rgb"]
-            if "hsv" in self.stack_actions[self.cursor_stack_action].keys():
-                self.hsv = self.stack_actions[self.cursor_stack_action]["hsv"]
-            if "mask" in self.stack_actions[self.cursor_stack_action].keys():
-                self.mask = self.stack_actions[self.cursor_stack_action]["mask"]
+            state = self.stack_actions[self.cursor_stack_action]
+
+            if "saved" in state:
+                self.saved = state["saved"]
+            if "size" in state:
+                self.size = state["size"]
+            if "rgb" in state:
+                self.rgb = state["rgb"].copy()
+            if "hsv" in state:
+                self.hsv = state["hsv"].copy()
+            if "mask" in state:
+                self.mask = state["mask"].copy()
 
         if self.console_debug:
-                self.console_debug_stack_actions()
+            self.console_debug_stack_actions()
             
         
     def redo(self):
-        """Redo the next action in the stack.
-        """
-        if self.cursor_stack_action < len(self.stack_actions)-1:
+        """Redo the next action in the stack."""
+        if self.cursor_stack_action < len(self.stack_actions) - 1:
             self.cursor_stack_action += 1
-            if "saved" in self.stack_actions[self.cursor_stack_action].keys():
-                self.saved = self.stack_actions[self.cursor_stack_action]["saved"]
-            if "size" in self.stack_actions[self.cursor_stack_action].keys():
-                self.size = self.stack_actions[self.cursor_stack_action]["size"]
-            if "rgb" in self.stack_actions[self.cursor_stack_action].keys():
-                self.rgb = self.stack_actions[self.cursor_stack_action]["rgb"]
-            if "hsv" in self.stack_actions[self.cursor_stack_action].keys():
-                self.hsv = self.stack_actions[self.cursor_stack_action]["hsv"]
-            if "mask" in self.stack_actions[self.cursor_stack_action].keys():
-                self.mask = self.stack_actions[self.cursor_stack_action]["mask"]
+            state = self.stack_actions[self.cursor_stack_action]
+
+            if "saved" in state:
+                self.saved = state["saved"]
+            if "size" in state:
+                self.size = state["size"]
+            if "rgb" in state:
+                self.rgb = state["rgb"].copy()
+            if "hsv" in state:
+                self.hsv = state["hsv"].copy()
+            if "mask" in state:
+                self.mask = state["mask"].copy()
 
         if self.console_debug:
-                self.console_debug_stack_actions()
+            self.console_debug_stack_actions()
 
     def is_undo(self):
         """Routine to check if there are actions in the stack that can be undo.
@@ -2065,6 +2068,7 @@ class PetroSeg:
         self.mask_menu.add_checkbutton(label="Background", command=self.set_background, variable=self.background_flag)
         self.mask_menu.add_checkbutton(label="Matrix", command=self.set_matrix, variable=self.matrix_flag)
         self.mask_menu.add_checkbutton(label="Inclusion", command=self.set_inclusion, variable=self.inclusion_flag)
+        self.mask_menu.add_separator()
         self.mask_menu.add_checkbutton(label="Overwrite", variable=self.overwrite_flag)
         self.mask_menu.add_command(label="Check Consistency...", command=self.check_consistency)
         self.mask_menu.add_separator()
@@ -2239,7 +2243,7 @@ class PetroSeg:
         # Intercept message to close app
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         # Cancel tool
-        self.canvas.bind("<Button-3>", self.deselect_tool)
+        self.canvas.bind("<Button-3>", lambda event: self.deselect_tool())
 
        
         self.image_id = None
